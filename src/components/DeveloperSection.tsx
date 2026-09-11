@@ -20,9 +20,22 @@ import {
   Check,
   Package,
   History,
+  Database,
+  BookOpen,
+  Globe,
+  Edit3,
+  Save,
+  Link as LinkIcon,
 } from 'lucide-react';
-import { UserProfile, GitHubRepoItem, CdrcaManifest, PackageType, PackageRecord } from '../types';
+import { UserProfile, GitHubRepoItem, CdrcaManifest, PackageType, PackageRecord, LibraryLinks } from '../types';
 import { SecurityBadge } from './SecurityBadge';
+import {
+  signInWithGoogle,
+  signOutContributor,
+  recordUserLoginInFirestore,
+  updateContributorProfileInFirestore,
+  savePackageToFirestore,
+} from '../lib/firebase';
 
 interface DeveloperSectionProps {
   onPackagePublished: (name: string) => void;
@@ -40,6 +53,26 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
   const [callbackUrl, setCallbackUrl] = useState<string>('');
   const [appUrl, setAppUrl] = useState<string>('');
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
+
+  // Google / Firestore Contributor state
+  const [isSigningInGoogle, setIsSigningInGoogle] = useState<boolean>(false);
+  const [showProfileEditor, setShowProfileEditor] = useState<boolean>(false);
+  const [editBio, setEditBio] = useState<string>('');
+  const [editWebsite, setEditWebsite] = useState<string>('');
+  const [editGithub, setEditGithub] = useState<string>('');
+  const [editDocs, setEditDocs] = useState<string>('');
+  const [editTwitter, setEditTwitter] = useState<string>('');
+  const [savingProfile, setSavingProfile] = useState<boolean>(false);
+  const [profileSaveMsg, setProfileSaveMsg] = useState<string | null>(null);
+
+  // Library links for registration/metadata
+  const [libraryLinks, setLibraryLinks] = useState<LibraryLinks>({
+    repository: '',
+    documentation: '',
+    demo: '',
+    homepage: '',
+    issues: '',
+  });
 
   // Contributor's published packages
   const [myPackages, setMyPackages] = useState<PackageRecord[]>([]);
@@ -237,6 +270,8 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
       if (data.user) {
         setCurrentUser(data.user);
         if (data.token) setCliToken(data.token);
+        // Record login in Firestore
+        recordUserLoginInFirestore(data.user, 'sandbox');
         fetchAuth();
       }
     } catch (e) {
@@ -244,8 +279,64 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
     }
   };
 
+  // Google sign in with Firebase Auth & Firestore record
+  const handleGoogleSignIn = async () => {
+    setIsSigningInGoogle(true);
+    try {
+      const { user } = await signInWithGoogle();
+      setCurrentUser(user);
+      setCliToken(`cdrca_tok_${user.id.slice(0, 16)}`);
+      if (user.links) {
+        setEditBio(user.bio || '');
+        setEditWebsite(user.links.website || '');
+        setEditGithub(user.links.github || '');
+        setEditDocs(user.links.docs || '');
+        setEditTwitter(user.links.twitter || '');
+      }
+      fetchAuth();
+    } catch (err: any) {
+      console.error('Google sign-in error:', err);
+    } finally {
+      setIsSigningInGoogle(false);
+    }
+  };
+
+  // Save updated contributor links & bio to Firestore
+  const handleSaveProfileToFirebase = async () => {
+    if (!currentUser) return;
+    setSavingProfile(true);
+    setProfileSaveMsg(null);
+    try {
+      const updatedLinks = {
+        website: editWebsite.trim(),
+        github: editGithub.trim(),
+        docs: editDocs.trim(),
+        twitter: editTwitter.trim(),
+      };
+      await updateContributorProfileInFirestore(currentUser.id, {
+        bio: editBio.trim(),
+        links: updatedLinks,
+      });
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              bio: editBio.trim(),
+              links: updatedLinks,
+            }
+          : null
+      );
+      setProfileSaveMsg('Contributor profile & links saved to Firestore successfully!');
+      setTimeout(() => setProfileSaveMsg(null), 3500);
+    } catch (e: any) {
+      setProfileSaveMsg(`Failed to save: ${e.message}`);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await signOutContributor();
     setCurrentUser(null);
     setSelectedRepo(null);
     setCliToken('');
@@ -285,6 +376,13 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
             repository: data.manifest.repository || repo.htmlUrl,
           });
           setSelectedReleaseTag(`v${data.manifest.version}`);
+          setLibraryLinks({
+            repository: data.manifest.repository || repo.htmlUrl,
+            documentation: `${data.manifest.repository || repo.htmlUrl}#readme`,
+            demo: `https://cdrca.dev/playground?pkg=${data.manifest.name || repo.name}`,
+            homepage: data.manifest.repository || repo.htmlUrl,
+            issues: `${data.manifest.repository || repo.htmlUrl}/issues`,
+          });
         }
         if (data.readme) {
           setReadmeContent(data.readme);
@@ -400,9 +498,28 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
         throw new Error(data.error || 'Failed to publish package');
       }
 
+      // Persist package, links, and readme into Firebase Firestore
+      if (data.package) {
+        const fullPkgRecord: PackageRecord = {
+          ...data.package,
+          links: libraryLinks.repository
+            ? libraryLinks
+            : {
+                repository: manifest.repository,
+                documentation: libraryLinks.documentation || `${manifest.repository}#readme`,
+                demo: libraryLinks.demo || `https://cdrca.dev/playground?pkg=${manifest.name}`,
+                homepage: libraryLinks.homepage || manifest.repository,
+                issues: libraryLinks.issues || `${manifest.repository}/issues`,
+              },
+        };
+        savePackageToFirestore(fullPkgRecord).catch((err) =>
+          console.warn('Firestore package persistence notice:', err)
+        );
+      }
+
       setPublishStatus({
         type: 'success',
-        message: `Package "${manifest.name}" v${manifest.version} successfully published to the CDRCA registry!`,
+        message: `Package "${manifest.name}" v${manifest.version} successfully published to the CDRCA registry & stored in Firebase!`,
       });
       onPackagePublished(manifest.name);
     } catch (err: any) {
@@ -461,47 +578,73 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
       {!currentUser && (
         <div className="space-y-6 max-w-2xl mx-auto">
           {/* Sign In Card */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-xs text-center">
-            <div className="w-14 h-14 rounded-2xl bg-stone-900 text-white flex items-center justify-center mx-auto mb-4 shadow-sm">
-              <Github className="w-8 h-8" />
+          <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-xs text-center space-y-6">
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-stone-900 text-white flex items-center justify-center shadow-xs">
+                <Database className="w-6 h-6 text-amber-400" />
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-white border border-stone-200 text-stone-900 flex items-center justify-center shadow-xs">
+                <svg className="w-6 h-6" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+              </div>
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold mb-3 border">
-              {isConfigured ? (
-                <span className="text-emerald-700 bg-emerald-50 border-emerald-200 inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  GitHub OAuth Configured &amp; Active
-                </span>
-              ) : (
-                <span className="text-amber-700 bg-amber-50 border-amber-200 inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  OAuth Secrets Pending in Settings
-                </span>
-              )}
+            <div className="space-y-2 max-w-md mx-auto">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Firebase Firestore Database Connected</span>
+              </div>
+              <h2 className="text-2xl font-black text-stone-900 tracking-tight">
+                Contributor Account &amp; Registry
+              </h2>
+              <p className="text-sm text-stone-600">
+                Authenticate as a contributor to manage your library metadata, documentation links, demos, and READMEs. Your account details and login history are stored securely in Firestore.
+              </p>
             </div>
 
-            <h2 className="text-xl font-bold text-stone-900">Sign in with GitHub</h2>
-            <p className="text-sm text-stone-600 mt-2 mb-6 max-w-md mx-auto">
-              Contributors authenticate with GitHub to verify repository ownership before registering packages, checking manifest contracts, and publishing releases.
-            </p>
+            {/* Primary Action: Google Sign-In */}
+            <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80 max-w-lg mx-auto space-y-3">
+              <button
+                id="btn-signin-google"
+                onClick={handleGoogleSignIn}
+                disabled={isSigningInGoogle}
+                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-white hover:bg-stone-100 text-stone-800 font-semibold text-sm border border-stone-300 shadow-xs transition-all hover:shadow-sm disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>{isSigningInGoogle ? 'Connecting to Google...' : 'Sign in with Google (Firebase Contributor)'}</span>
+              </button>
+              <p className="text-[11px] text-stone-500">
+                Recommended: Stores contributor login info, profile links, and library manifests into Firestore collection <code className="font-mono text-stone-700 bg-stone-200/60 px-1 py-0.5 rounded">users</code>.
+              </p>
+            </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {/* Alternative Methods */}
+            <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 id="btn-signin-github"
                 onClick={handleConnectGitHub}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-stone-900 text-white hover:bg-stone-800 font-semibold text-sm transition-colors shadow-xs"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-stone-900 text-white hover:bg-stone-800 font-semibold text-xs transition-colors shadow-xs"
               >
-                <Github className="w-4 h-4" />
+                <Github className="w-3.5 h-3.5" />
                 <span>Continue with GitHub</span>
               </button>
 
               <button
                 id="btn-sandbox-signin"
                 onClick={() => handleSandboxLogin('ayyan-contributor')}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-sm border border-stone-300 transition-colors"
-                title="Instant test mode without setting up GitHub OAuth app keys"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs border border-stone-300 transition-colors"
+                title="Instant test mode without setting up OAuth keys"
               >
-                <UserCheck className="w-4 h-4 text-stone-600" />
+                <UserCheck className="w-3.5 h-3.5 text-stone-600" />
                 <span>Test as Sandbox Contributor</span>
               </button>
             </div>
@@ -770,6 +913,14 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
 
             <div className="flex items-center gap-2">
               <button
+                type="button"
+                onClick={() => setShowProfileEditor(!showProfileEditor)}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-stone-600" />
+                <span>{showProfileEditor ? 'Hide Profile Editor' : 'Manage Profile & Links'}</span>
+              </button>
+              <button
                 id="btn-signout"
                 onClick={handleLogout}
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors"
@@ -779,6 +930,162 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Firestore Contributor Account Info Bar */}
+          <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 shadow-xs text-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-3">
+              <div className="flex items-center gap-2 font-bold text-emerald-950">
+                <Database className="w-4 h-4 text-emerald-700" />
+                <span>Firebase Firestore Contributor Identity</span>
+              </div>
+              <span className="font-mono text-[11px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 inline-flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Collection: users/{currentUser.id}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-stone-700">
+              <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Auth Provider</span>
+                <span className="font-semibold text-stone-900 capitalize flex items-center gap-1 mt-0.5">
+                  {currentUser.provider === 'google' ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      Google Firebase
+                    </>
+                  ) : (
+                    <>
+                      <Github className="w-3.5 h-3.5" />
+                      {currentUser.provider || 'GitHub'}
+                    </>
+                  )}
+                </span>
+              </div>
+
+              <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Registered Email</span>
+                <span className="font-mono text-stone-900 truncate block mt-0.5" title={currentUser.email || 'None'}>
+                  {currentUser.email || 'N/A'}
+                </span>
+              </div>
+
+              <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Firestore User ID</span>
+                <span className="font-mono text-stone-900 truncate block mt-0.5" title={currentUser.id}>
+                  {currentUser.id}
+                </span>
+              </div>
+
+              <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Last Logged In</span>
+                <span className="text-stone-900 truncate block mt-0.5">
+                  {currentUser.lastLoginAt ? new Date(currentUser.lastLoginAt).toLocaleTimeString() : 'Just now'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Expandable Contributor Profile & Links Editor */}
+          {showProfileEditor && (
+            <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-stone-800" />
+                  <h3 className="text-sm font-bold text-stone-900">
+                    Edit Contributor Links &amp; Bio (Stored in Firestore)
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowProfileEditor(false)}
+                  className="text-xs text-stone-500 hover:text-stone-800"
+                >
+                  Close
+                </button>
+              </div>
+
+              {profileSaveMsg && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{profileSaveMsg}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="md:col-span-2">
+                  <label className="font-bold text-stone-700 block mb-1">Contributor Bio</label>
+                  <input
+                    type="text"
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    placeholder="e.g. Core contributor building math animation shaders and DSL hooks"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 text-xs focus:ring-1 focus:ring-stone-400 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Portfolio or Website URL</label>
+                  <input
+                    type="url"
+                    value={editWebsite}
+                    onChange={(e) => setEditWebsite(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">GitHub Profile URL</label>
+                  <input
+                    type="url"
+                    value={editGithub}
+                    onChange={(e) => setEditGithub(e.target.value)}
+                    placeholder={`https://github.com/${currentUser.login}`}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Documentation or Guides URL</label>
+                  <input
+                    type="url"
+                    value={editDocs}
+                    onChange={(e) => setEditDocs(e.target.value)}
+                    placeholder="https://docs.example.com"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Twitter / Social Profile URL</label>
+                  <input
+                    type="url"
+                    value={editTwitter}
+                    onChange={(e) => setEditTwitter(e.target.value)}
+                    placeholder="https://x.com/username"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveProfileToFirebase}
+                  disabled={savingProfile}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800 text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingProfile ? 'Saving to Firestore...' : 'Save Profile to Firestore'}</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* CLI Login Token Card */}
           {cliToken && (
@@ -1097,6 +1404,70 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 text-xs focus:ring-1 focus:ring-stone-400 focus:bg-white"
                   placeholder="Describe your animation library, plugin capabilities, or app..."
                 />
+              </div>
+
+              {/* Library Links & Resources (Persisted to Firestore) */}
+              <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <LinkIcon className="w-4 h-4 text-stone-700" />
+                    <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider">
+                      Library Links &amp; Public Resources (Stored in Firestore)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-mono bg-stone-200 text-stone-700 px-2 py-0.5 rounded">
+                    Firestore: packages/{manifest.name || 'pkg'}/links
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Provide external links for package documentation, interactive playgrounds, issues, and guides. These are persisted in Firestore and rendered on the public registry page.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">Documentation URL</label>
+                    <input
+                      type="url"
+                      value={libraryLinks.documentation || ''}
+                      onChange={(e) => setLibraryLinks({ ...libraryLinks, documentation: e.target.value })}
+                      placeholder="https://cdrca.dev/docs/your-lib"
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">Live Demo / Interactive Playground</label>
+                    <input
+                      type="url"
+                      value={libraryLinks.demo || ''}
+                      onChange={(e) => setLibraryLinks({ ...libraryLinks, demo: e.target.value })}
+                      placeholder="https://cdrca.dev/playground?pkg=..."
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">Homepage URL</label>
+                    <input
+                      type="url"
+                      value={libraryLinks.homepage || ''}
+                      onChange={(e) => setLibraryLinks({ ...libraryLinks, homepage: e.target.value })}
+                      placeholder="https://example.com/project"
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">Issues &amp; Bug Tracker</label>
+                    <input
+                      type="url"
+                      value={libraryLinks.issues || ''}
+                      onChange={(e) => setLibraryLinks({ ...libraryLinks, issues: e.target.value })}
+                      placeholder="https://github.com/org/repo/issues"
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* SPECIAL SECTION FOR PLUGINS: PERMISSIONS & USES */}

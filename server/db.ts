@@ -692,7 +692,32 @@ export const db = {
     }
   },
 
+  updatePackageLinks(name: string, links: any): PackageRecord | null {
+    const schema = loadDatabase();
+    const pkg = schema.packages[name.toLowerCase()];
+    if (!pkg) return null;
+    pkg.links = { ...(pkg.links || {}), ...links };
+    pkg.updatedAt = new Date().toISOString();
+    saveDatabase(schema);
+    return pkg;
+  },
+
+  updatePackageReadme(name: string, readme: string): PackageRecord | null {
+    const schema = loadDatabase();
+    const pkg = schema.packages[name.toLowerCase()];
+    if (!pkg) return null;
+    pkg.readme = readme;
+    pkg.updatedAt = new Date().toISOString();
+    saveDatabase(schema);
+    return pkg;
+  },
+
   // User & Session management
+  getAllUsers(): UserProfile[] {
+    const schema = loadDatabase();
+    return Object.values(schema.users);
+  },
+
   upsertUser(user: UserProfile): void {
     const schema = loadDatabase();
     schema.users[user.id] = user;

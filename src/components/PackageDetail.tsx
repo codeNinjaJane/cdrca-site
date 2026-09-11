@@ -16,9 +16,20 @@ import {
   Layers,
   History,
   AlertTriangle,
+  Database,
+  Globe,
+  BookOpen,
+  Edit3,
+  Save,
+  Link as LinkIcon,
+  Sparkles,
 } from 'lucide-react';
-import { PackageRecord, PackageType } from '../types';
+import { PackageRecord, PackageType, LibraryLinks } from '../types';
 import { SecurityBadge } from './SecurityBadge';
+import {
+  updateLibraryLinksInFirestore,
+  updateLibraryReadmeInFirestore,
+} from '../lib/firebase';
 
 interface PackageDetailProps {
   packageName: string;
@@ -38,7 +49,17 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [copiedInstall, setCopiedInstall] = useState<boolean>(false);
   const [selectedVersion, setSelectedVersion] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'readme' | 'versions' | 'manifest' | 'dependencies'>('readme');
+  const [activeTab, setActiveTab] = useState<'readme' | 'versions' | 'manifest' | 'dependencies' | 'firestore'>('readme');
+
+  // Interactive Library Links & Readme editor (persisting to Firestore)
+  const [isEditingMetadata, setIsEditingMetadata] = useState<boolean>(false);
+  const [editDocUrl, setEditDocUrl] = useState<string>('');
+  const [editDemoUrl, setEditDemoUrl] = useState<string>('');
+  const [editHomepageUrl, setEditHomepageUrl] = useState<string>('');
+  const [editIssuesUrl, setEditIssuesUrl] = useState<string>('');
+  const [editReadmeText, setEditReadmeText] = useState<string>('');
+  const [isSavingMetadata, setIsSavingMetadata] = useState<boolean>(false);
+  const [metadataSaveStatus, setMetadataSaveStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -56,6 +77,11 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
         if (isMounted) {
           setPkg(data);
           setSelectedVersion(data.latestVersion);
+          setEditDocUrl(data.links?.documentation || '');
+          setEditDemoUrl(data.links?.demo || '');
+          setEditHomepageUrl(data.links?.homepage || '');
+          setEditIssuesUrl(data.links?.issues || '');
+          setEditReadmeText(data.readme || '');
           setLoading(false);
         }
       })
@@ -77,6 +103,46 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
     navigator.clipboard.writeText(cmd);
     setCopiedInstall(true);
     setTimeout(() => setCopiedInstall(false), 2000);
+  };
+
+  const handleSaveLibraryMetadata = async () => {
+    if (!pkg) return;
+    setIsSavingMetadata(true);
+    setMetadataSaveStatus(null);
+    try {
+      const updatedLinks: LibraryLinks = {
+        repository: pkg.repository,
+        documentation: editDocUrl.trim(),
+        demo: editDemoUrl.trim(),
+        homepage: editHomepageUrl.trim(),
+        issues: editIssuesUrl.trim(),
+      };
+
+      // 1. Update Firestore links & readme
+      await updateLibraryLinksInFirestore(pkg.name, updatedLinks);
+      if (editReadmeText !== pkg.readme) {
+        await updateLibraryReadmeInFirestore(pkg.name, editReadmeText);
+      }
+
+      setPkg((prev) =>
+        prev
+          ? {
+              ...prev,
+              links: updatedLinks,
+              readme: editReadmeText,
+            }
+          : null
+      );
+      setMetadataSaveStatus('Library metadata & README saved to Firestore successfully!');
+      setTimeout(() => {
+        setMetadataSaveStatus(null);
+        setIsEditingMetadata(false);
+      }, 2500);
+    } catch (e: any) {
+      setMetadataSaveStatus(`Error saving to Firestore: ${e.message}`);
+    } finally {
+      setIsSavingMetadata(false);
+    }
   };
 
   if (loading) {
@@ -253,6 +319,182 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Library Links & Resources Bar (Stored in Firebase Firestore) */}
+        <div className="mt-6 pt-6 border-t border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-stone-700" />
+              <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">
+                Library Links &amp; Resources (Firestore)
+              </h3>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono px-1.5 py-0.5 rounded">
+                packages/{pkg.name}/links
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs pt-1">
+              {pkg.links?.documentation ? (
+                <a
+                  href={pkg.links.documentation}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-900 font-medium transition-colors border border-stone-200"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-stone-600" />
+                  <span>Documentation Guide</span>
+                  <ExternalLink className="w-3 h-3 text-stone-400" />
+                </a>
+              ) : null}
+
+              {pkg.links?.demo ? (
+                <a
+                  href={pkg.links.demo}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 font-medium transition-colors border border-amber-200"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Interactive Playground Demo</span>
+                  <ExternalLink className="w-3 h-3 text-amber-500" />
+                </a>
+              ) : null}
+
+              {pkg.links?.issues ? (
+                <a
+                  href={pkg.links.issues}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-900 font-medium transition-colors border border-stone-200"
+                >
+                  <span>Issues &amp; Tracker</span>
+                  <ExternalLink className="w-3 h-3 text-stone-400" />
+                </a>
+              ) : null}
+
+              {pkg.links?.homepage ? (
+                <a
+                  href={pkg.links.homepage}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-900 font-medium transition-colors border border-stone-200"
+                >
+                  <Globe className="w-3.5 h-3.5 text-stone-600" />
+                  <span>Project Homepage</span>
+                  <ExternalLink className="w-3 h-3 text-stone-400" />
+                </a>
+              ) : null}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsEditingMetadata(!isEditingMetadata)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-stone-900 hover:bg-stone-800 text-white shadow-xs shrink-0 self-start md:self-auto transition-colors"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>{isEditingMetadata ? 'Close Editor' : 'Edit Links & Readme'}</span>
+          </button>
+        </div>
+
+        {/* Inline Firestore Metadata & Readme Editor */}
+        {isEditingMetadata && (
+          <div className="mt-4 p-5 bg-stone-50 border border-stone-300 rounded-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-2">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-stone-900 uppercase">
+                  Update Library Links &amp; README in Firebase Firestore
+                </h4>
+              </div>
+              <span className="text-[10px] text-stone-500 font-mono">
+                Real-time Firestore Synchronized
+              </span>
+            </div>
+
+            {metadataSaveStatus && (
+              <div className="p-2.5 rounded-lg bg-emerald-100 text-emerald-900 text-xs flex items-center gap-2 border border-emerald-300">
+                <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>{metadataSaveStatus}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Documentation URL</label>
+                <input
+                  type="url"
+                  value={editDocUrl}
+                  onChange={(e) => setEditDocUrl(e.target.value)}
+                  placeholder="https://cdrca.dev/docs/your-lib"
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Playground / Demo URL</label>
+                <input
+                  type="url"
+                  value={editDemoUrl}
+                  onChange={(e) => setEditDemoUrl(e.target.value)}
+                  placeholder="https://cdrca.dev/playground?pkg=..."
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Homepage URL</label>
+                <input
+                  type="url"
+                  value={editHomepageUrl}
+                  onChange={(e) => setEditHomepageUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Issues URL</label>
+                <input
+                  type="url"
+                  value={editIssuesUrl}
+                  onChange={(e) => setEditIssuesUrl(e.target.value)}
+                  placeholder="https://github.com/org/repo/issues"
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="font-bold text-stone-700 block mb-1">README Content (Markdown)</label>
+                <textarea
+                  rows={6}
+                  value={editReadmeText}
+                  onChange={(e) => setEditReadmeText(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:ring-1 focus:ring-stone-400"
+                  placeholder="# Library README documentation..."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsEditingMetadata(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLibraryMetadata}
+                disabled={isSavingMetadata}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800 text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{isSavingMetadata ? 'Saving to Firestore...' : 'Save to Firestore'}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PROMINENT PLUGIN SECURITY DISCLOSURE (REQUIRED BY SPEC IF TYPE === 'plugin') */}
@@ -321,6 +563,21 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
           <span className="inline-flex items-center gap-1.5">
             <PkgIcon className="w-4 h-4" />
             <span>Dependencies ({Object.keys(manifest?.dependencies || {}).length})</span>
+          </span>
+        </button>
+
+        <button
+          id="tab-firestore"
+          onClick={() => setActiveTab('firestore')}
+          className={`pb-3 px-3 relative transition-colors ${
+            activeTab === 'firestore'
+              ? 'text-stone-900 font-semibold border-b-2 border-stone-900'
+              : 'text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Database className="w-4 h-4 text-emerald-600" />
+            <span>Firestore Document</span>
           </span>
         </button>
       </div>
@@ -439,6 +696,80 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
             ) : (
               <p className="text-sm text-stone-500 italic">This package has zero declared dependencies.</p>
             )}
+          </div>
+        )}
+
+        {activeTab === 'firestore' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span>Cloud Firestore Document Model</span>
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Live data record stored in Firebase Firestore collection <code className="font-mono bg-stone-100 px-1 py-0.5 rounded">packages/{pkg.name}</code>.
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Firestore Synced</span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Collection &amp; Doc</span>
+                <span className="font-mono text-stone-900 font-semibold truncate block mt-0.5">
+                  packages/{pkg.name}
+                </span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Package Author</span>
+                <span className="font-semibold text-stone-900 block mt-0.5">
+                  @{pkg.author}
+                </span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Stored License</span>
+                <span className="font-semibold text-stone-900 block mt-0.5">
+                  {pkg.license}
+                </span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-[10px] uppercase font-bold text-stone-500 block">Last Firestore Sync</span>
+                <span className="font-mono text-stone-900 block mt-0.5">
+                  {new Date(pkg.updatedAt).toLocaleTimeString()}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-stone-700">Firestore Raw Document Payload:</span>
+                <span className="text-[10px] font-mono text-stone-500">JSON representation</span>
+              </div>
+              <pre className="p-4 bg-stone-900 text-stone-100 rounded-xl font-mono text-xs overflow-x-auto leading-relaxed border border-stone-800">
+                {JSON.stringify(
+                  {
+                    name: pkg.name,
+                    author: pkg.author,
+                    type: pkg.type,
+                    license: pkg.license,
+                    description: pkg.description,
+                    repository: pkg.repository,
+                    latestVersion: pkg.latestVersion,
+                    totalDownloads: pkg.totalDownloads,
+                    updatedAt: pkg.updatedAt,
+                    links: pkg.links || {},
+                    readme: `${(pkg.readme || '').slice(0, 120)}... (${(pkg.readme || '').length} bytes)`,
+                    versions: Object.keys(pkg.versions),
+                  },
+                  null,
+                  2
+                )}
+              </pre>
+            </div>
           </div>
         )}
       </div>

@@ -25,6 +25,14 @@ export interface PackageVersion {
   githubReleaseAssetUrl?: string;
 }
 
+export interface LibraryLinks {
+  repository?: string;
+  documentation?: string;
+  demo?: string;
+  homepage?: string;
+  issues?: string;
+}
+
 export interface PackageRecord {
   name: string;
   type: PackageType;
@@ -42,6 +50,8 @@ export interface PackageRecord {
   uses: [string, string][];
   ownerGithubId: string;
   ownerLogin: string;
+  links?: LibraryLinks;
+  tags?: string[];
 }
 
 // Exact contract response shapes matching CLI spec
@@ -77,12 +87,30 @@ export interface SearchResultItem {
 
 export interface UserProfile {
   id: string;
-  githubId: string;
+  githubId?: string;
+  googleUid?: string;
   login: string;
   name: string;
+  email?: string;
   avatarUrl: string;
   htmlUrl: string;
+  provider?: 'google' | 'github' | 'sandbox';
+  role?: 'contributor' | 'maintainer' | 'core';
+  bio?: string;
+  links?: {
+    github?: string;
+    website?: string;
+    docs?: string;
+    twitter?: string;
+  };
+  publishedPackages?: string[];
   createdAt: string;
+  lastLoginAt?: string;
+  loginHistory?: Array<{
+    timestamp: string;
+    provider: string;
+    userAgent?: string;
+  }>;
 }
 
 export interface GitHubRepoItem {

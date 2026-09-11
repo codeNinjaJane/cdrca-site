@@ -216,7 +216,50 @@ apiRouter.get('/packages/:name', (req, res) => {
     permissions: pkg.permissions,
     uses: pkg.uses,
     ownerLogin: pkg.ownerLogin,
+    links: pkg.links || {
+      repository: pkg.repository,
+      documentation: `${pkg.repository}#readme`,
+      demo: `https://cdrca.dev/playground?pkg=${pkg.name}`,
+      homepage: pkg.repository,
+      issues: `${pkg.repository}/issues`,
+    },
   });
+});
+
+/**
+ * PUT /api/packages/:name/links
+ * Update package documentation/demo/repository links
+ */
+apiRouter.put('/packages/:name/links', (req, res) => {
+  const name = req.params.name.toLowerCase();
+  const { links } = req.body;
+  if (!links || typeof links !== 'object') {
+    return res.status(400).json({ error: 'links object is required' });
+  }
+
+  const updated = db.updatePackageLinks(name, links);
+  if (!updated) {
+    return res.status(404).json({ error: `Package "${name}" not found.` });
+  }
+  res.json({ success: true, package: updated });
+});
+
+/**
+ * PUT /api/packages/:name/readme
+ * Update package README documentation
+ */
+apiRouter.put('/packages/:name/readme', (req, res) => {
+  const name = req.params.name.toLowerCase();
+  const { readme } = req.body;
+  if (typeof readme !== 'string') {
+    return res.status(400).json({ error: 'readme string is required' });
+  }
+
+  const updated = db.updatePackageReadme(name, readme);
+  if (!updated) {
+    return res.status(404).json({ error: `Package "${name}" not found.` });
+  }
+  res.json({ success: true, package: updated });
 });
 
 /**
@@ -274,6 +317,71 @@ apiRouter.get('/contributors/:login', (req, res) => {
       createdAt: new Date().toISOString(),
     },
     packages,
+  });
+});
+
+/**
+ * GET /api/contributors
+ * List all registered contributors and their stored accounts
+ */
+apiRouter.get('/contributors', (req, res) => {
+  const users = db.getAllUsers();
+  res.json({ contributors: users });
+});
+
+/**
+ * POST /api/auth/google-sync
+ * Synchronizes Google-authenticated user session with Express backend
+ */
+apiRouter.post('/auth/google-sync', (req, res) => {
+  const { user } = req.body;
+  if (!user || !user.id) {
+    return res.status(400).json({ error: 'User profile with id is required' });
+  }
+
+  // Ensure user profile in db
+  const profile: UserProfile = {
+    id: user.id,
+    googleUid: user.id,
+    githubId: user.githubId || user.id,
+    login: user.login || (user.email ? user.email.split('@')[0] : `user-${user.id.slice(0, 6)}`),
+    name: user.name || user.login || 'Contributor',
+    email: user.email || '',
+    avatarUrl: user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
+    htmlUrl: user.htmlUrl || `https://github.com/${user.login}`,
+    provider: 'google',
+    role: user.role || 'contributor',
+    bio: user.bio || 'CDRCA Animation DSL Ecosystem Contributor',
+    links: user.links || {
+      website: '',
+      github: `https://github.com/${user.login}`,
+      docs: '',
+      twitter: '',
+    },
+    publishedPackages: user.publishedPackages || [],
+    createdAt: user.createdAt || new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+  };
+
+  db.upsertUser(profile);
+
+  // Generate session / API token
+  const sessionToken = `cdrca_tok_${crypto.randomBytes(16).toString('hex')}`;
+  db.saveSession(sessionToken, profile.id, undefined, 30 * 24 * 60 * 60 * 1000);
+
+  // Set cross-site secure cookie for iframe preview & browser
+  res.cookie('cdrca_session', sessionToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+
+  res.json({
+    success: true,
+    token: sessionToken,
+    user: profile,
   });
 });
 
