@@ -159,21 +159,21 @@ export default function App() {
                 onClick={() => handleSelectSection('download')}
                 className="hover:text-stone-950 transition-colors"
               >
-                Section A: Download
+                Download
               </button>
               <span>•</span>
               <button
                 onClick={() => handleSelectSection('browse')}
                 className="hover:text-stone-950 transition-colors"
               >
-                Section B: Libraries
+                Browse Libraries
               </button>
               <span>•</span>
               <button
                 onClick={() => handleSelectSection('developer')}
                 className="hover:text-stone-950 transition-colors"
               >
-                Section C: Contributor Registry
+                Publish
               </button>
               <span>•</span>
               <a

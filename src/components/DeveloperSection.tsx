@@ -30,12 +30,12 @@ import {
 import { UserProfile, GitHubRepoItem, CdrcaManifest, PackageType, PackageRecord, LibraryLinks } from '../types';
 import { SecurityBadge } from './SecurityBadge';
 import {
-  signInWithGoogle,
   signOutContributor,
   recordUserLoginInFirestore,
   updateContributorProfileInFirestore,
   savePackageToFirestore,
 } from '../lib/firebase';
+import { ContributorProfileEditor } from './ContributorProfileEditor';
 
 interface DeveloperSectionProps {
   onPackagePublished: (name: string) => void;
@@ -54,8 +54,7 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
   const [appUrl, setAppUrl] = useState<string>('');
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
 
-  // Google / Firestore Contributor state
-  const [isSigningInGoogle, setIsSigningInGoogle] = useState<boolean>(false);
+  // Profile Editor state
   const [showProfileEditor, setShowProfileEditor] = useState<boolean>(false);
   const [editBio, setEditBio] = useState<string>('');
   const [editWebsite, setEditWebsite] = useState<string>('');
@@ -157,10 +156,13 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
           sharedUrl: data.sharedUrl || 'https://ais-pre-2lhvcfb237pkxbmnjj4od6-388732444541.asia-southeast1.run.app',
           devCallbackUrl: data.devCallbackUrl || 'https://ais-dev-2lhvcfb237pkxbmnjj4od6-388732444541.asia-southeast1.run.app/auth/callback',
           sharedCallbackUrl: data.sharedCallbackUrl || 'https://ais-pre-2lhvcfb237pkxbmnjj4od6-388732444541.asia-southeast1.run.app/auth/callback',
-          authMethod: data.authMethod || (data.user ? 'sandbox' : 'none'),
+          authMethod: data.authMethod || (data.user ? 'github_oauth' : 'none'),
           hasClientId: Boolean(data.hasClientId),
           hasClientSecret: Boolean(data.hasClientSecret),
         });
+        if (data.user) {
+          recordUserLoginInFirestore(data.user);
+        }
         setLoadingAuth(false);
       })
       .catch((err) => {
@@ -184,6 +186,7 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
         }
         if (event.data.user) {
           setCurrentUser(event.data.user);
+          recordUserLoginInFirestore(event.data.user);
         }
         setShowSetupModal(false);
         setPopupBlocked(false);
@@ -255,49 +258,6 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
     } catch (e) {
       console.error('OAuth initiation failed:', e);
       setShowSetupModal(true);
-    }
-  };
-
-  // Sandbox login for immediate testing
-  const handleSandboxLogin = async (username: string = 'muhammad-ayyan') => {
-    try {
-      const res = await fetch('/api/auth/dev-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      });
-      const data = await res.json();
-      if (data.user) {
-        setCurrentUser(data.user);
-        if (data.token) setCliToken(data.token);
-        // Record login in Firestore
-        recordUserLoginInFirestore(data.user, 'sandbox');
-        fetchAuth();
-      }
-    } catch (e) {
-      console.error('Sandbox login error:', e);
-    }
-  };
-
-  // Google sign in with Firebase Auth & Firestore record
-  const handleGoogleSignIn = async () => {
-    setIsSigningInGoogle(true);
-    try {
-      const { user } = await signInWithGoogle();
-      setCurrentUser(user);
-      setCliToken(`cdrca_tok_${user.id.slice(0, 16)}`);
-      if (user.links) {
-        setEditBio(user.bio || '');
-        setEditWebsite(user.links.website || '');
-        setEditGithub(user.links.github || '');
-        setEditDocs(user.links.docs || '');
-        setEditTwitter(user.links.twitter || '');
-      }
-      fetchAuth();
-    } catch (err: any) {
-      console.error('Google sign-in error:', err);
-    } finally {
-      setIsSigningInGoogle(false);
     }
   };
 
@@ -579,74 +539,38 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
         <div className="space-y-6 max-w-2xl mx-auto">
           {/* Sign In Card */}
           <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-xs text-center space-y-6">
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-stone-900 text-white flex items-center justify-center shadow-xs">
-                <Database className="w-6 h-6 text-amber-400" />
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-white border border-stone-200 text-stone-900 flex items-center justify-center shadow-xs">
-                <svg className="w-6 h-6" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
+            <div className="flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-stone-900 text-white flex items-center justify-center shadow-xs">
+                <Github className="w-7 h-7" />
               </div>
             </div>
 
             <div className="space-y-2 max-w-md mx-auto">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Firebase Firestore Database Connected</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-800 border border-stone-200">
+                <ShieldCheck className="w-3.5 h-3.5 text-stone-700" />
+                <span>Verified Contributor Registry</span>
               </div>
               <h2 className="text-2xl font-black text-stone-900 tracking-tight">
-                Contributor Account &amp; Registry
+                Connect GitHub Contributor Account
               </h2>
               <p className="text-sm text-stone-600">
-                Authenticate as a contributor to manage your library metadata, documentation links, demos, and READMEs. Your account details and login history are stored securely in Firestore.
+                Sign in with GitHub to verify repository ownership, issue CLI credentials, and publish immutable packages and plugins to the CDRCA registry.
               </p>
             </div>
 
-            {/* Primary Action: Google Sign-In */}
-            <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80 max-w-lg mx-auto space-y-3">
-              <button
-                id="btn-signin-google"
-                onClick={handleGoogleSignIn}
-                disabled={isSigningInGoogle}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-white hover:bg-stone-100 text-stone-800 font-semibold text-sm border border-stone-300 shadow-xs transition-all hover:shadow-sm disabled:opacity-50"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-                <span>{isSigningInGoogle ? 'Connecting to Google...' : 'Sign in with Google (Firebase Contributor)'}</span>
-              </button>
-              <p className="text-[11px] text-stone-500">
-                Recommended: Stores contributor login info, profile links, and library manifests into Firestore collection <code className="font-mono text-stone-700 bg-stone-200/60 px-1 py-0.5 rounded">users</code>.
-              </p>
-            </div>
-
-            {/* Alternative Methods */}
-            <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-center gap-3">
+            {/* Primary Action: GitHub OAuth Sign-In */}
+            <div className="p-5 rounded-xl bg-stone-50 border border-stone-200/80 max-w-md mx-auto space-y-3">
               <button
                 id="btn-signin-github"
                 onClick={handleConnectGitHub}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-stone-900 text-white hover:bg-stone-800 font-semibold text-xs transition-colors shadow-xs"
+                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-sm shadow-xs transition-all hover:shadow-sm"
               >
-                <Github className="w-3.5 h-3.5" />
-                <span>Continue with GitHub</span>
+                <Github className="w-5 h-5" />
+                <span>Sign in with GitHub</span>
               </button>
-
-              <button
-                id="btn-sandbox-signin"
-                onClick={() => handleSandboxLogin('ayyan-contributor')}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs border border-stone-300 transition-colors"
-                title="Instant test mode without setting up OAuth keys"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-stone-600" />
-                <span>Test as Sandbox Contributor</span>
-              </button>
+              <p className="text-[11px] text-stone-500">
+                Verifies repository ownership on GitHub and provisions your secure CLI bearer token.
+              </p>
             </div>
           </div>
 
@@ -826,15 +750,6 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
             <div className="flex flex-col sm:flex-row items-center justify-end gap-2 pt-2">
               <button
                 onClick={() => {
-                  setShowSetupModal(false);
-                  handleSandboxLogin('ayyan-contributor');
-                }}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors"
-              >
-                Use Sandbox Contributor Instead
-              </button>
-              <button
-                onClick={() => {
                   fetchAuth();
                   setShowSetupModal(false);
                 }}
@@ -948,22 +863,8 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
               <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
                 <span className="text-[10px] uppercase font-bold text-stone-500 block">Auth Provider</span>
                 <span className="font-semibold text-stone-900 capitalize flex items-center gap-1 mt-0.5">
-                  {currentUser.provider === 'google' ? (
-                    <>
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                      </svg>
-                      Google Firebase
-                    </>
-                  ) : (
-                    <>
-                      <Github className="w-3.5 h-3.5" />
-                      {currentUser.provider || 'GitHub'}
-                    </>
-                  )}
+                  <Github className="w-3.5 h-3.5" />
+                  GitHub OAuth
                 </span>
               </div>
 

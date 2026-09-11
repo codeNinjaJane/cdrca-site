@@ -88,13 +88,12 @@ export interface SearchResultItem {
 export interface UserProfile {
   id: string;
   githubId?: string;
-  googleUid?: string;
   login: string;
   name: string;
   email?: string;
   avatarUrl: string;
   htmlUrl: string;
-  provider?: 'google' | 'github' | 'sandbox';
+  provider?: 'github';
   role?: 'contributor' | 'maintainer' | 'core';
   bio?: string;
   links?: {

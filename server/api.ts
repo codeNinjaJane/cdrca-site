@@ -118,6 +118,109 @@ function validateManifest(manifest: any): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
+/**
+ * Parses GitHub repository URLs in multiple formats:
+ * - https://github.com/owner/repo
+ * - git@github.com:owner/repo.git
+ * - owner/repo
+ */
+export function parseGitHubRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
+  if (!repoUrl || typeof repoUrl !== 'string') return null;
+  const trimmed = repoUrl.trim();
+  const httpMatch = trimmed.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/i);
+  if (httpMatch) {
+    return {
+      owner: httpMatch[1],
+      repo: httpMatch[2].replace(/\.git$/i, ''),
+    };
+  }
+  const sshMatch = trimmed.match(/github\.com:([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/i);
+  if (sshMatch) {
+    return {
+      owner: sshMatch[1],
+      repo: sshMatch[2].replace(/\.git$/i, ''),
+    };
+  }
+  const shortMatch = trimmed.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/);
+  if (shortMatch) {
+    return {
+      owner: shortMatch[1],
+      repo: shortMatch[2].replace(/\.git$/i, ''),
+    };
+  }
+  return null;
+}
+
+/**
+ * Verifies repository ownership directly against GitHub API.
+ * Ensures the authenticated user has admin or push access, or is the repo owner.
+ */
+export async function verifyRepositoryOwnership(
+  repoUrl: string,
+  user: UserProfile,
+  githubToken?: string
+): Promise<{ verified: boolean; error?: string; repoData?: any }> {
+  const parsed = parseGitHubRepoUrl(repoUrl);
+  if (!parsed) {
+    return {
+      verified: false,
+      error: `Invalid repository URL "${repoUrl}". Expected a valid GitHub repository URL (e.g. https://github.com/owner/repo).`,
+    };
+  }
+
+  const { owner, repo } = parsed;
+
+  if (!githubToken) {
+    return {
+      verified: false,
+      error: 'Unauthorized: Active GitHub OAuth session required to verify repository ownership.',
+    };
+  }
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        'User-Agent': 'CDRCA-Package-Registry',
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 403) {
+        return {
+          verified: false,
+          error: `Repository verification failed: Repository "${owner}/${repo}" was not found or your GitHub account (@${user.login}) does not have permission to access it.`,
+        };
+      }
+      const errText = await res.text();
+      return {
+        verified: false,
+        error: `GitHub API error during ownership verification (${res.status}): ${errText}`,
+      };
+    }
+
+    const repoData = await res.json();
+    const isOwner = repoData.owner?.login?.toLowerCase() === user.login.toLowerCase();
+    const isAdmin = Boolean(repoData.permissions?.admin);
+    const hasPush = Boolean(repoData.permissions?.push);
+
+    if (!isOwner && !isAdmin && !hasPush) {
+      return {
+        verified: false,
+        error: `Forbidden: Authenticated user "@${user.login}" does not have admin or push write access to repository "${owner}/${repo}". Only verified repository owners/maintainers can publish packages.`,
+      };
+    }
+
+    return { verified: true, repoData };
+  } catch (err: any) {
+    return {
+      verified: false,
+      error: `Failed to contact GitHub API during repository verification: ${err.message}`,
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // A) DOWNLOAD ENDPOINTS (NO AUTH)
 // ---------------------------------------------------------------------------
@@ -329,62 +432,6 @@ apiRouter.get('/contributors', (req, res) => {
   res.json({ contributors: users });
 });
 
-/**
- * POST /api/auth/google-sync
- * Synchronizes Google-authenticated user session with Express backend
- */
-apiRouter.post('/auth/google-sync', (req, res) => {
-  const { user } = req.body;
-  if (!user || !user.id) {
-    return res.status(400).json({ error: 'User profile with id is required' });
-  }
-
-  // Ensure user profile in db
-  const profile: UserProfile = {
-    id: user.id,
-    googleUid: user.id,
-    githubId: user.githubId || user.id,
-    login: user.login || (user.email ? user.email.split('@')[0] : `user-${user.id.slice(0, 6)}`),
-    name: user.name || user.login || 'Contributor',
-    email: user.email || '',
-    avatarUrl: user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
-    htmlUrl: user.htmlUrl || `https://github.com/${user.login}`,
-    provider: 'google',
-    role: user.role || 'contributor',
-    bio: user.bio || 'CDRCA Animation DSL Ecosystem Contributor',
-    links: user.links || {
-      website: '',
-      github: `https://github.com/${user.login}`,
-      docs: '',
-      twitter: '',
-    },
-    publishedPackages: user.publishedPackages || [],
-    createdAt: user.createdAt || new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
-  };
-
-  db.upsertUser(profile);
-
-  // Generate session / API token
-  const sessionToken = `cdrca_tok_${crypto.randomBytes(16).toString('hex')}`;
-  db.saveSession(sessionToken, profile.id, undefined, 30 * 24 * 60 * 60 * 1000);
-
-  // Set cross-site secure cookie for iframe preview & browser
-  res.cookie('cdrca_session', sessionToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
-
-  res.json({
-    success: true,
-    token: sessionToken,
-    user: profile,
-  });
-});
-
 // ---------------------------------------------------------------------------
 // C) DEVELOPER / CONTRIBUTOR REGISTRY SIDE (GITHUB OAUTH INTEGRATION)
 // ---------------------------------------------------------------------------
@@ -410,7 +457,7 @@ apiRouter.get('/auth/me', (req, res) => {
     devCallbackUrl: `${RUNTIME_DEV_URL}/auth/callback`,
     sharedCallbackUrl: `${RUNTIME_PRE_URL}/auth/callback`,
     callbackUrl: `${baseUrl}/auth/callback`,
-    authMethod: auth?.githubToken ? 'github_oauth' : auth ? 'sandbox' : 'none',
+    authMethod: auth?.githubToken ? 'github_oauth' : 'none',
   });
 });
 
@@ -431,6 +478,7 @@ apiRouter.get('/auth/token', requireAuth, (req, res) => {
 /**
  * GET /api/auth/github/url
  * Returns the direct GitHub OAuth authorization URL
+ * Supports optional CLI parameters: redirect_port (for local loopback listener) and state (CLI nonce)
  */
 apiRouter.get('/auth/github/url', (req, res) => {
   const ghConfig = getGitHubConfig();
@@ -459,9 +507,16 @@ apiRouter.get('/auth/github/url', (req, res) => {
     });
   }
 
-  // Encode state with redirect_uri, random nonce, and timestamp
+  // Parse optional CLI interop parameters
+  const rawPort = req.query.redirect_port ? parseInt(req.query.redirect_port as string, 10) : undefined;
+  const redirectPort = rawPort && !isNaN(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : undefined;
+  const cliState = typeof req.query.state === 'string' && req.query.state.trim() ? req.query.state.trim() : '';
+
+  // Encode state with redirect_uri, CLI state & port, random nonce, and timestamp
   const statePayload = {
     redirect_uri: redirectUri,
+    redirect_port: redirectPort,
+    cli_state: cliState,
     nonce: crypto.randomBytes(12).toString('hex'),
     ts: Date.now(),
   };
@@ -486,7 +541,7 @@ apiRouter.get('/auth/github/url', (req, res) => {
 /**
  * GitHub OAuth Callback Handler:
  * Supports both /auth/callback and /api/auth/github/callback
- * Exchanges code for GitHub access token, queries user profile, sets session, and communicates via postMessage
+ * Exchanges code for GitHub access token, queries user profile, sets session, and communicates via postMessage or CLI redirect
  */
 export async function handleGitHubOAuthCallback(req: Request, res: Response) {
   const code = req.query.code as string;
@@ -514,13 +569,25 @@ export async function handleGitHubOAuthCallback(req: Request, res: Response) {
     return res.status(400).send('OAuth Error: Missing authorization code parameter.');
   }
 
-  // Unpack state to determine original redirect_uri
+  // Unpack state to determine original redirect_uri and CLI parameters
   let redirectUri = `${getAppBaseUrl(req)}/auth/callback`;
+  let redirectPort: number | undefined;
+  let cliState = '';
+
   if (state) {
     try {
       const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
       if (decoded.redirect_uri) {
         redirectUri = decoded.redirect_uri;
+      }
+      if (decoded.cli_state) {
+        cliState = decoded.cli_state;
+      }
+      if (decoded.redirect_port) {
+        const p = Number(decoded.redirect_port);
+        if (!isNaN(p) && p > 0 && p <= 65535) {
+          redirectPort = p;
+        }
       }
     } catch (e) {
       console.warn('Could not parse OAuth state, using default redirect URI:', e);
@@ -614,7 +681,78 @@ export async function handleGitHubOAuthCallback(req: Request, res: Response) {
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
-    // 6. Return popup completion page with postMessage and auto-close
+    // 6. Check if this is a CLI interop flow (redirect_port present in OAuth state)
+    if (redirectPort) {
+      const cliCallbackUrl = `http://127.0.0.1:${redirectPort}/callback?token=${encodeURIComponent(
+        sessionToken
+      )}&state=${encodeURIComponent(cliState)}`;
+
+      return res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CLI Authentication Successful</title>
+  <meta http-equiv="refresh" content="0;url=${cliCallbackUrl}">
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0c0a09;
+      color: #fafaf9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: #1c1917;
+      border: 1px solid #292524;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 440px;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      background: #14532d;
+      color: #86efac;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    h2 { margin: 0 0 8px; color: #fff; font-size: 1.25rem; }
+    p { color: #a8a29e; font-size: 0.875rem; line-height: 1.5; margin: 0 0 20px; }
+    .btn {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+  </style>
+  <script>
+    setTimeout(() => {
+      window.location.href = ${JSON.stringify(cliCallbackUrl)};
+    }, 50);
+  </script>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">✓ GitHub OAuth Verified</span>
+    <h2>Authenticated as @${userProfile.login}</h2>
+    <p>Transferring authenticated token to your local CDRCA CLI listener on port <strong>${redirectPort}</strong>...</p>
+    <a class="btn" href="${cliCallbackUrl}">Click here if not redirected automatically</a>
+  </div>
+</body>
+</html>`);
+    }
+
+    // 7. Standard Browser Popup Completion Page
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -727,35 +865,6 @@ export async function handleGitHubOAuthCallback(req: Request, res: Response) {
 
 // Wire up both /auth/github/callback and /auth/callback
 apiRouter.get('/auth/github/callback', handleGitHubOAuthCallback);
-
-/**
- * Dev / Sandbox Login for testing without waiting for GitHub OAuth keys
- */
-apiRouter.post('/auth/dev-login', (req, res) => {
-  const username = (req.body.username || 'muhammad-ayyan').toLowerCase();
-  const user: UserProfile = {
-    id: username === 'muhammad-ayyan' ? '1001' : `dev-${username}`,
-    githubId: username === 'muhammad-ayyan' ? '1001' : `dev-${username}`,
-    login: username,
-    name: username === 'muhammad-ayyan' ? 'Muhammad Ayyan' : `Dev Contributor (${username})`,
-    avatarUrl: `https://avatars.githubusercontent.com/${username}`,
-    htmlUrl: `https://github.com/${username}`,
-    createdAt: new Date().toISOString(),
-  };
-
-  db.upsertUser(user);
-  const sessionToken = `cdrca_tok_${crypto.randomBytes(16).toString('hex')}`;
-  db.saveSession(sessionToken, user.id);
-
-  res.cookie('cdrca_session', sessionToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  });
-
-  res.json({ success: true, user, token: sessionToken });
-});
 
 apiRouter.post('/auth/logout', (req, res) => {
   const auth = getAuthenticatedUser(req);
@@ -997,6 +1106,7 @@ apiRouter.get('/repos/inspect', requireAuth, async (req, res) => {
  */
 apiRouter.post('/packages', requireAuth, async (req, res) => {
   const user = (req as any).user as UserProfile;
+  const githubToken = (req as any).githubToken as string | undefined;
   const { manifest, readme, releaseTag, githubReleaseAssetUrl } = req.body;
 
   // 1. Validate manifest structure and fixed contract
@@ -1005,10 +1115,16 @@ apiRouter.post('/packages', requireAuth, async (req, res) => {
     return res.status(400).json({ error: validation.error });
   }
 
+  // 2. Enforce GitHub repository ownership verification (Must be owner or have push/admin rights)
+  const ownership = await verifyRepositoryOwnership(manifest.repository, user, githubToken);
+  if (!ownership.verified) {
+    return res.status(403).json({ error: ownership.error });
+  }
+
   const manifestVersion = manifest.version.trim();
   const tag = (releaseTag || `v${manifestVersion}`).trim();
 
-  // 2. Validate version in manifest matches GitHub release tag exactly
+  // 3. Validate version in manifest matches GitHub release tag exactly
   const normalizedTag = tag.startsWith('v') ? tag.slice(1) : tag;
   const normalizedVersion = manifestVersion.startsWith('v') ? manifestVersion.slice(1) : manifestVersion;
   if (normalizedTag !== normalizedVersion) {
@@ -1038,26 +1154,47 @@ apiRouter.post('/packages', requireAuth, async (req, res) => {
  * Publish a new version of an existing package
  *
  * Publishing validation enforced:
- * - Validates corresponding GitHub release/tag actually exists on that repo
+ * - Contributor owns or maintains the package in registry
+ * - Contributor has push/admin access to the GitHub repository
  * - The version in the manifest matches the GitHub release tag exactly
  * - The version has not already been published — versions are IMMUTABLE, never allow overwriting
  * - If type is "plugin", permissions and uses arrays must be present
  */
 apiRouter.post('/packages/:name/releases', requireAuth, async (req, res) => {
   const user = (req as any).user as UserProfile;
+  const githubToken = (req as any).githubToken as string | undefined;
   const pkgName = req.params.name.toLowerCase();
   const { manifest, readme, releaseTag, githubReleaseAssetUrl } = req.body;
 
-  // 1. Validate manifest structure
+  // 1. Verify package exists and belongs to this user
+  const existing = db.getPackage(pkgName);
+  if (!existing) {
+    return res.status(404).json({
+      error: `Package "${pkgName}" is not registered yet. Use POST /api/packages to register it first.`,
+    });
+  }
+  if (existing.ownerLogin && existing.ownerLogin.toLowerCase() !== user.login.toLowerCase()) {
+    return res.status(403).json({
+      error: `Forbidden: Package "${pkgName}" is maintained by @${existing.ownerLogin}. Only the original package author can publish new versions.`,
+    });
+  }
+
+  // 2. Validate manifest structure
   const validation = validateManifest(manifest);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
 
+  // 3. Enforce GitHub repository ownership verification
+  const ownership = await verifyRepositoryOwnership(manifest.repository, user, githubToken);
+  if (!ownership.verified) {
+    return res.status(403).json({ error: ownership.error });
+  }
+
   const manifestVersion = manifest.version.trim();
   const tag = (releaseTag || `v${manifestVersion}`).trim();
 
-  // 2. Validate tag matches version
+  // 4. Validate tag matches version
   const normalizedTag = tag.startsWith('v') ? tag.slice(1) : tag;
   const normalizedVersion = manifestVersion.startsWith('v') ? manifestVersion.slice(1) : manifestVersion;
   if (normalizedTag !== normalizedVersion) {
@@ -1086,14 +1223,26 @@ apiRouter.post('/packages/:name/releases', requireAuth, async (req, res) => {
 apiRouter.post('/packages/register', requireAuth, async (req, res) => {
   // Delegate to POST /packages or /packages/:name/releases
   const user = (req as any).user as UserProfile;
+  const githubToken = (req as any).githubToken as string | undefined;
   const { manifest, readme, releaseTag, githubReleaseAssetUrl } = req.body;
   const validation = validateManifest(manifest);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
 
+  const ownership = await verifyRepositoryOwnership(manifest.repository, user, githubToken);
+  if (!ownership.verified) {
+    return res.status(403).json({ error: ownership.error });
+  }
+
   const pkgName = manifest.name.toLowerCase().trim();
   const existing = db.getPackage(pkgName);
+
+  if (existing && existing.ownerLogin && existing.ownerLogin.toLowerCase() !== user.login.toLowerCase()) {
+    return res.status(403).json({
+      error: `Forbidden: Package "${pkgName}" is maintained by @${existing.ownerLogin}. Only the original package author can publish new versions.`,
+    });
+  }
 
   try {
     let record;

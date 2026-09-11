@@ -106,14 +106,6 @@ export const ContributorProfile: React.FC<ContributorProfileProps> = ({
                 <span>@{user.login}</span>
                 <span>•</span>
                 <span>CDRCA Contributor</span>
-                {user.provider === 'google' && (
-                  <>
-                    <span>•</span>
-                    <span className="text-[10px] font-sans font-semibold bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded border border-blue-200">
-                      Google Auth Contributor
-                    </span>
-                  </>
-                )}
               </div>
               {user.bio && (
                 <p className="text-xs text-stone-700 mt-2 max-w-xl leading-relaxed">

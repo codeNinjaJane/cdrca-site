@@ -15,8 +15,6 @@ import {
 } from 'firebase/firestore';
 import {
   getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
@@ -106,95 +104,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Google Auth Provider
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account',
-});
-
-/**
- * Sign in with Google using Firebase Auth popup
- * Stores the contributor account & login info into Firestore `users` collection
- */
-export async function signInWithGoogle(): Promise<{ user: UserProfile; firebaseUser: FirebaseUser }> {
-  const result = await signInWithPopup(auth, googleProvider);
-  const fbUser = result.user;
-
-  const now = new Date().toISOString();
-  const loginName = fbUser.email ? fbUser.email.split('@')[0] : `user-${fbUser.uid.slice(0, 6)}`;
-
-  const userDocRef = doc(db, 'users', fbUser.uid);
-  const existingSnap = await getDoc(userDocRef);
-
-  let profile: UserProfile;
-
-  if (existingSnap.exists()) {
-    const data = existingSnap.data() as UserProfile;
-    profile = {
-      ...data,
-      id: fbUser.uid,
-      googleUid: fbUser.uid,
-      name: fbUser.displayName || data.name || loginName,
-      email: fbUser.email || data.email || '',
-      avatarUrl: fbUser.photoURL || data.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.uid}`,
-      lastLoginAt: now,
-      provider: 'google',
-      loginHistory: [
-        ...(data.loginHistory || []),
-        {
-          timestamp: now,
-          provider: 'google',
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'web',
-        },
-      ].slice(-10), // keep latest 10 login events
-    };
-    await setDoc(userDocRef, profile, { merge: true });
-  } else {
-    profile = {
-      id: fbUser.uid,
-      googleUid: fbUser.uid,
-      login: loginName,
-      name: fbUser.displayName || loginName,
-      email: fbUser.email || '',
-      avatarUrl: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.uid}`,
-      htmlUrl: `https://github.com/${loginName}`,
-      provider: 'google',
-      role: 'contributor',
-      bio: 'CDRCA Animation DSL Ecosystem Contributor',
-      links: {
-        website: '',
-        github: `https://github.com/${loginName}`,
-        docs: '',
-        twitter: '',
-      },
-      publishedPackages: [],
-      createdAt: now,
-      lastLoginAt: now,
-      loginHistory: [
-        {
-          timestamp: now,
-          provider: 'google',
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'web',
-        },
-      ],
-    };
-    await setDoc(userDocRef, profile);
-  }
-
-  // Also synchronize with backend session so CLI and API can authenticate
-  try {
-    await fetch('/api/auth/google-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: profile }),
-    });
-  } catch (e) {
-    console.warn('Backend google-sync notice:', e);
-  }
-
-  return { user: profile, firebaseUser: fbUser };
-}
-
 /**
  * Sign out of Firebase and backend session
  */
@@ -212,9 +121,9 @@ export async function signOutContributor(): Promise<void> {
 }
 
 /**
- * Store or update contributor login information into Firestore `users` collection
+ * Store or update contributor login information into Firestore `users` collection for verified GitHub contributors
  */
-export async function recordUserLoginInFirestore(user: UserProfile, provider: 'google' | 'github' | 'sandbox' = 'google'): Promise<void> {
+export async function recordUserLoginInFirestore(user: UserProfile): Promise<void> {
   try {
     const userDocRef = doc(db, 'users', user.id);
     const existingSnap = await getDoc(userDocRef);
@@ -227,12 +136,12 @@ export async function recordUserLoginInFirestore(user: UserProfile, provider: 'g
         login: user.login || existing.login,
         avatarUrl: user.avatarUrl || existing.avatarUrl,
         lastLoginAt: now,
-        provider: provider,
+        provider: 'github',
         loginHistory: [
           ...(existing.loginHistory || []),
           {
             timestamp: now,
-            provider,
+            provider: 'github',
             userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'web',
           },
         ].slice(-10),
@@ -241,12 +150,13 @@ export async function recordUserLoginInFirestore(user: UserProfile, provider: 'g
     } else {
       const newProfile: UserProfile = {
         ...user,
-        provider,
+        provider: 'github',
         role: user.role || 'contributor',
         links: user.links || {
           github: user.htmlUrl || `https://github.com/${user.login}`,
           website: '',
           docs: '',
+          twitter: '',
         },
         publishedPackages: user.publishedPackages || [],
         createdAt: user.createdAt || now,
@@ -254,7 +164,7 @@ export async function recordUserLoginInFirestore(user: UserProfile, provider: 'g
         loginHistory: [
           {
             timestamp: now,
-            provider,
+            provider: 'github',
             userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'web',
           },
         ],
