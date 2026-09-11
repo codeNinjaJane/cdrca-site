@@ -1,0 +1,50 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Contributor account details, links, and login records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of the user or contributor" },
+        "login": { "type": "string", "description": "Username or login handle" },
+        "name": { "type": "string", "description": "Display name of the user" },
+        "email": { "type": "string", "description": "Contact email address" },
+        "avatarUrl": { "type": "string", "description": "Avatar image URL" },
+        "htmlUrl": { "type": "string", "description": "External profile URL" },
+        "role": { "type": "string", "description": "Role within the ecosystem, e.g., contributor" },
+        "bio": { "type": "string", "description": "Short bio or tagline" },
+        "provider": { "type": "string", "description": "Authentication provider: google, github, or sandbox" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of account creation" },
+        "lastLoginAt": { "type": "string", "description": "ISO timestamp of most recent login" }
+      },
+      "required": ["id", "login", "name"]
+    },
+    "PackageRecord": {
+      "title": "PackageRecord",
+      "description": "Registered package record with metadata, links, versions, and readme",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Package name" },
+        "author": { "type": "string", "description": "Author username" },
+        "type": { "type": "string", "description": "Package type: core-engine, plugin, shader-pack, or math-extension" },
+        "license": { "type": "string", "description": "License identifier (e.g. IOSL-v1.0)" },
+        "description": { "type": "string", "description": "Summary description of the package" },
+        "repository": { "type": "string", "description": "Source repository URL" },
+        "latestVersion": { "type": "string", "description": "Semantic version of the latest release" },
+        "totalDownloads": { "type": "number", "description": "Total download counter" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["name", "author", "type", "latestVersion"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Contributor accounts, credentials, links and login histories"
+    },
+    "/packages/{packageId}": {
+      "schema": "PackageRecord",
+      "description": "CDRCA registered packages with manifests, links, and documentation"
+    }
+  }
+}
