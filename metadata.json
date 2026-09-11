@@ -1,0 +1,6 @@
+{
+  "name": "CDRCA Package Registry",
+  "description": "The official registry, package directory, and installer portal for CDRCA — the JavaScript-based animation DSL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

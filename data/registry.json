@@ -1,0 +1,343 @@
+{
+  "packages": {
+    "calculastic": {
+      "name": "calculastic",
+      "type": "package",
+      "description": "Advanced calculus animation library for parametric curves, derivatives, and vector field rendering.",
+      "author": "muhammad-ayyan",
+      "repository": "https://github.com/Muhammad-Ayyan-no1/calculastic",
+      "license": "IOSL",
+      "latestVersion": "1.4.2",
+      "totalDownloads": 4820,
+      "createdAt": "2026-07-15T08:30:00.000Z",
+      "updatedAt": "2026-09-02T14:15:00.000Z",
+      "permissions": [],
+      "uses": [],
+      "ownerGithubId": "1001",
+      "ownerLogin": "muhammad-ayyan",
+      "readme": "# calculastic\n\nAdvanced calculus animation primitives and math visualizer for the **CDRCA** animation DSL.\n\n## Installation\n```bash\ncdrca install calculastic\n```\n\n## Quick Example in CDRCA\n```cdrca\nimport { ParametricCurve, VectorField } from \"calculastic\";\n\nscene CalculusDemo {\n  duration: 4s;\n  fps: 60;\n  \n  grid = MathGrid({ step: 1.0, range: [-5, 5] });\n  curve = ParametricCurve(t => [t, Math.sin(t) * Math.exp(-0.2 * t)], { t: [0, 4 * Math.PI] });\n  \n  animate(curve.draw(), 2.5s, easeInOutCubic);\n}\n```\n\n## License\nIslamic Open Source License (IOSL). See LICENSE.md in canonical CDRCA repository.\n",
+      "versions": {
+        "1.4.2": {
+          "version": "1.4.2",
+          "publishedAt": "2026-09-02T14:15:00.000Z",
+          "downloadCount": 1840,
+          "manifest": {
+            "name": "calculastic",
+            "version": "1.4.2",
+            "description": "Advanced calculus animation library",
+            "type": "package",
+            "entry": "src/main.cdrca",
+            "icon": "icon.png",
+            "author": "muhammad-ayyan",
+            "license": "IOSL",
+            "repository": "https://github.com/Muhammad-Ayyan-no1/calculastic",
+            "dependencies": {
+              "mathcore": "^3.1.0"
+            },
+            "permissions": [],
+            "uses": []
+          }
+        },
+        "1.4.0": {
+          "version": "1.4.0",
+          "publishedAt": "2026-08-20T10:00:00.000Z",
+          "downloadCount": 1650,
+          "manifest": {
+            "name": "calculastic",
+            "version": "1.4.0",
+            "description": "Calculus animation library",
+            "type": "package",
+            "entry": "src/main.cdrca",
+            "author": "muhammad-ayyan",
+            "license": "IOSL",
+            "repository": "https://github.com/Muhammad-Ayyan-no1/calculastic",
+            "dependencies": {
+              "mathcore": "^3.0.0"
+            },
+            "permissions": [],
+            "uses": []
+          }
+        },
+        "1.0.0": {
+          "version": "1.0.0",
+          "publishedAt": "2026-07-15T08:30:00.000Z",
+          "downloadCount": 1330,
+          "manifest": {
+            "name": "calculastic",
+            "version": "1.0.0",
+            "description": "Initial release of calculastic for CDRCA",
+            "type": "package",
+            "entry": "src/main.cdrca",
+            "author": "muhammad-ayyan",
+            "license": "IOSL",
+            "repository": "https://github.com/Muhammad-Ayyan-no1/calculastic",
+            "dependencies": {},
+            "permissions": [],
+            "uses": []
+          }
+        }
+      }
+    },
+    "gl-transpiler-hook": {
+      "name": "gl-transpiler-hook",
+      "type": "plugin",
+      "description": "Hardware-accelerated shader compiler and AST transpiler pipeline plugin for high-performance CDRCA playback.",
+      "author": "ayyan-core",
+      "repository": "https://github.com/ISLAH-org/cdrca-gl-hook",
+      "license": "IOSL",
+      "latestVersion": "2.1.0",
+      "totalDownloads": 3410,
+      "createdAt": "2026-07-28T12:00:00.000Z",
+      "updatedAt": "2026-09-05T19:30:00.000Z",
+      "permissions": [
+        "trusted",
+        "fileRead",
+        "spawnProcess"
+      ],
+      "uses": [
+        [
+          "before",
+          "transpile"
+        ],
+        [
+          "after",
+          "emit"
+        ]
+      ],
+      "ownerGithubId": "1002",
+      "ownerLogin": "islah-core",
+      "readme": "# gl-transpiler-hook (CDRCA Transpiler Plugin)\n\nA low-level plugin hook that attaches to the CDRCA transpilation pipeline to compile GLSL fragment shaders for smooth GPU rendering.\n\n> ⚠️ **Security Notice**: This package is a CDRCA **Plugin**. It executes during the transpiler stage and requests permissions to read files and spawn background compiler tools.\n\n## Permissions Requested\n- `trusted`: Access to core transpiler context\n- `fileRead`: Reads shader template files from disk\n- `spawnProcess`: Spawns native glslangValidator to check shader syntax\n\n## Pipeline Hooks Declared\n- `[\"before\", \"transpile\"]`: Intercepts raw .cdrca AST blocks\n- `[\"after\", \"emit\"]`: Post-processes the emitted JS animation bundle\n\n## Installation\n```bash\ncdrca install gl-transpiler-hook\n```\n\n## License\nIslamic Open Source License (IOSL).\n",
+      "versions": {
+        "2.1.0": {
+          "version": "2.1.0",
+          "publishedAt": "2026-09-05T19:30:00.000Z",
+          "downloadCount": 1950,
+          "manifest": {
+            "name": "gl-transpiler-hook",
+            "version": "2.1.0",
+            "description": "Hardware-accelerated shader compiler pipeline plugin",
+            "type": "plugin",
+            "entry": "dist/index.js",
+            "author": "ayyan-core",
+            "license": "IOSL",
+            "repository": "https://github.com/ISLAH-org/cdrca-gl-hook",
+            "dependencies": {},
+            "permissions": [
+              "trusted",
+              "fileRead",
+              "spawnProcess"
+            ],
+            "uses": [
+              [
+                "before",
+                "transpile"
+              ],
+              [
+                "after",
+                "emit"
+              ]
+            ]
+          }
+        },
+        "2.0.0": {
+          "version": "2.0.0",
+          "publishedAt": "2026-08-10T16:00:00.000Z",
+          "downloadCount": 1460,
+          "manifest": {
+            "name": "gl-transpiler-hook",
+            "version": "2.0.0",
+            "description": "Initial pipeline plugin for GLSL rendering in CDRCA",
+            "type": "plugin",
+            "entry": "dist/index.js",
+            "author": "ayyan-core",
+            "license": "IOSL",
+            "repository": "https://github.com/ISLAH-org/cdrca-gl-hook",
+            "dependencies": {},
+            "permissions": [
+              "trusted",
+              "fileRead"
+            ],
+            "uses": [
+              [
+                "before",
+                "transpile"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "pendulum-sim": {
+      "name": "pendulum-sim",
+      "type": "app",
+      "description": "Full interactive double & triple pendulum chaotic motion simulator project created in CDRCA.",
+      "author": "physics-dev",
+      "repository": "https://github.com/islah-community/pendulum-sim",
+      "license": "IOSL",
+      "latestVersion": "1.0.3",
+      "totalDownloads": 1980,
+      "createdAt": "2026-08-01T15:00:00.000Z",
+      "updatedAt": "2026-09-04T11:20:00.000Z",
+      "permissions": [],
+      "uses": [],
+      "ownerGithubId": "1003",
+      "ownerLogin": "physics-dev",
+      "readme": "# pendulum-sim\n\nA standalone CDRCA application simulating chaotic Lagrangian mechanics with real-time vector path tracing.\n\n## Running the App\n```bash\ncdrca install pendulum-sim\ncdrca run pendulum-sim\n```\n\n## Features\n- RK4 integration of non-linear differential equations\n- Trace color gradient fading over time\n- Real-time parameter tweaking via sliders\n\n## License\nIslamic Open Source License (IOSL).\n",
+      "versions": {
+        "1.0.3": {
+          "version": "1.0.3",
+          "publishedAt": "2026-09-04T11:20:00.000Z",
+          "downloadCount": 1120,
+          "manifest": {
+            "name": "pendulum-sim",
+            "version": "1.0.3",
+            "description": "Interactive multi-pendulum chaos animation app",
+            "type": "app",
+            "entry": "app/index.cdrca",
+            "author": "physics-dev",
+            "license": "IOSL",
+            "repository": "https://github.com/islah-community/pendulum-sim",
+            "dependencies": {
+              "calculastic": "^1.4.0"
+            },
+            "permissions": [],
+            "uses": []
+          }
+        },
+        "1.0.0": {
+          "version": "1.0.0",
+          "publishedAt": "2026-08-01T15:00:00.000Z",
+          "downloadCount": 860,
+          "manifest": {
+            "name": "pendulum-sim",
+            "version": "1.0.0",
+            "description": "Double pendulum chaotic motion simulator project in CDRCA",
+            "type": "app",
+            "entry": "app/index.cdrca",
+            "author": "physics-dev",
+            "license": "IOSL",
+            "repository": "https://github.com/islah-community/pendulum-sim",
+            "dependencies": {},
+            "permissions": [],
+            "uses": []
+          }
+        }
+      }
+    },
+    "vectorial-core": {
+      "name": "vectorial-core",
+      "type": "package",
+      "description": "Foundational 2D and 3D vector math primitives, quaternions, and Bézier curves for CDRCA animations.",
+      "author": "muhammad-ayyan",
+      "repository": "https://github.com/Muhammad-Ayyan-no1/vectorial-core",
+      "license": "IOSL",
+      "latestVersion": "1.1.0",
+      "totalDownloads": 5120,
+      "createdAt": "2026-07-10T09:00:00.000Z",
+      "updatedAt": "2026-09-01T18:00:00.000Z",
+      "permissions": [],
+      "uses": [],
+      "ownerGithubId": "1001",
+      "ownerLogin": "muhammad-ayyan",
+      "readme": "# vectorial-core\n\nEssential vector mathematics and matrix transformation primitives for CDRCA scripts.\n\n## Installation\n```bash\ncdrca install vectorial-core\n```\n\n## Features\n- High performance Vec2, Vec3, Mat4 structs\n- Catmull-Rom & Cubic Bézier interpolation\n- Zero runtime dependencies\n\n## License\nIslamic Open Source License (IOSL).\n",
+      "versions": {
+        "1.1.0": {
+          "version": "1.1.0",
+          "publishedAt": "2026-09-01T18:00:00.000Z",
+          "downloadCount": 2900,
+          "manifest": {
+            "name": "vectorial-core",
+            "version": "1.1.0",
+            "description": "Foundational vector math primitives for CDRCA",
+            "type": "package",
+            "entry": "lib/vectorial.cdrca",
+            "author": "muhammad-ayyan",
+            "license": "IOSL",
+            "repository": "https://github.com/Muhammad-Ayyan-no1/vectorial-core",
+            "dependencies": {},
+            "permissions": [],
+            "uses": []
+          }
+        }
+      }
+    },
+    "mpd-streamer": {
+      "name": "mpd-streamer",
+      "type": "plugin",
+      "description": "Direct high-throughput Motion Path Data (MPD) reader and writer plugin attaching to parse and render hooks.",
+      "author": "motion-lab",
+      "repository": "https://github.com/islah-org/mpd-streamer",
+      "license": "Custom Commercial / IOSL Dual",
+      "latestVersion": "1.2.0",
+      "totalDownloads": 2310,
+      "createdAt": "2026-08-12T10:00:00.000Z",
+      "updatedAt": "2026-09-07T14:00:00.000Z",
+      "permissions": [
+        "fileRead",
+        "fileWrite",
+        "mpdRead",
+        "mpdWrite"
+      ],
+      "uses": [
+        [
+          "on",
+          "parse"
+        ],
+        [
+          "before",
+          "render"
+        ]
+      ],
+      "ownerGithubId": "1004",
+      "ownerLogin": "motion-lab",
+      "readme": "# mpd-streamer (CDRCA Plugin)\n\nEnables streaming serialization of CDRCA motion paths into binary `.mpd` cache files for immediate scrubbing.\n\n> ⚠️ **Security Notice**: This is a CDRCA **Plugin**. It requests explicit permissions to read and write files on disk as well as manipulate MPD stream buffers.\n\n## Permissions Requested\n- `fileRead`: Load cached motion trajectory files\n- `fileWrite`: Save exported motion path streams\n- `mpdRead`: Access raw motion buffers in CDRCA memory\n- `mpdWrite`: Inject computed coordinate frames\n\n## Installation\n```bash\ncdrca install mpd-streamer\n```\n\n## License\nCustom Commercial / IOSL Dual. Declared by author in cdrca.json.\n",
+      "versions": {
+        "1.2.0": {
+          "version": "1.2.0",
+          "publishedAt": "2026-09-07T14:00:00.000Z",
+          "downloadCount": 1240,
+          "manifest": {
+            "name": "mpd-streamer",
+            "version": "1.2.0",
+            "description": "High-throughput Motion Path Data reader and writer plugin",
+            "type": "plugin",
+            "entry": "dist/mpd.js",
+            "author": "motion-lab",
+            "license": "Custom Commercial / IOSL Dual",
+            "repository": "https://github.com/islah-org/mpd-streamer",
+            "dependencies": {},
+            "permissions": [
+              "fileRead",
+              "fileWrite",
+              "mpdRead",
+              "mpdWrite"
+            ],
+            "uses": [
+              [
+                "on",
+                "parse"
+              ],
+              [
+                "before",
+                "render"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "users": {
+    "1001": {
+      "id": "1001",
+      "githubId": "1001",
+      "login": "muhammad-ayyan",
+      "name": "Muhammad Ayyan",
+      "avatarUrl": "https://avatars.githubusercontent.com/muhammad-ayyan",
+      "htmlUrl": "https://github.com/muhammad-ayyan",
+      "createdAt": "2026-09-10T17:48:05.201Z"
+    }
+  },
+  "sessions": {},
+  "apiTokens": {}
+}
