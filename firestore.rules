@@ -1,28 +1,29 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+    // Helper function for document ID validation
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     // Contributor user accounts - store login info, author profiles, links
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if true; // Allow client sync on login and updates
-      allow delete: if isAuthenticated();
+      allow create, update: if isValidId(userId);
+      allow delete: if false;
     }
 
     // Packages registry: links, manifest, versions, and READMEs
     match /packages/{packageId} {
       allow read: if true;
-      allow write: if true; // Allows contributors to publish and update documentation/links
+      allow create, update: if isValidId(packageId);
+      allow delete: if false;
     }
 
     // Registry stats and download metrics
     match /registry_stats/{statId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isValidId(statId);
     }
   }
 }

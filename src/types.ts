@@ -122,5 +122,9 @@ export interface GitHubRepoItem {
   isAdmin: boolean;
   ownerLogin: string;
   defaultBranch: string;
+  language?: string;
+  stars?: number;
+  forks?: number;
+  updatedAt?: string;
   releases?: string[];
 }

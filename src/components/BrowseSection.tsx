@@ -19,9 +19,14 @@ import { SecurityBadge } from './SecurityBadge';
 interface BrowseSectionProps {
   onSelectPackage: (name: string) => void;
   onSelectContributor?: (login: string) => void;
+  onSelectSection?: (section: 'download' | 'browse' | 'developer') => void;
 }
 
-export const BrowseSection: React.FC<BrowseSectionProps> = ({ onSelectPackage, onSelectContributor }) => {
+export const BrowseSection: React.FC<BrowseSectionProps> = ({
+  onSelectPackage,
+  onSelectContributor,
+  onSelectSection,
+}) => {
   const [query, setQuery] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<'trending' | 'recent' | 'name'>('trending');
@@ -126,7 +131,11 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({ onSelectPackage, o
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by package name, author, keywords, or license (e.g. calculastic, shader, IOSL)..."
+              placeholder={
+                packages.length === 0 && trending.length === 0
+                  ? "Registry is empty — nothing to search until someone adds something"
+                  : "Search packages by name, author, keywords, or license..."
+              }
               className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 text-sm focus:outline-hidden focus:ring-2 focus:ring-stone-400 focus:bg-white transition-all"
             />
             {query && (
@@ -182,8 +191,8 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({ onSelectPackage, o
         </div>
       </div>
 
-      {/* Discovery Feeds (Only displayed when not heavily filtering) */}
-      {!query && selectedType === 'all' && (
+      {/* Discovery Feeds (Only displayed when packages exist and not filtering) */}
+      {!query && selectedType === 'all' && trending.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
           {/* Trending Feed */}
           <div className="bg-stone-50 rounded-2xl border border-stone-200/80 p-5">
@@ -269,9 +278,11 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({ onSelectPackage, o
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold text-stone-700">
-            {packages.length} package{packages.length === 1 ? '' : 's'} available
+            {packages.length === 0 ? '0 libraries registered' : `${packages.length} librar${packages.length === 1 ? 'y' : 'ies'} available`}
           </h2>
-          <span className="text-xs text-stone-400">Click any package for README and permissions</span>
+          {packages.length > 0 && (
+            <span className="text-xs text-stone-400">Click any library for README and details</span>
+          )}
         </div>
 
         {loading ? (
@@ -280,21 +291,44 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({ onSelectPackage, o
             <p className="text-xs text-stone-500">Querying registry database...</p>
           </div>
         ) : packages.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-stone-200 p-8">
-            <PkgIcon className="w-10 h-10 text-stone-300 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-stone-900">No packages match your search</h3>
-            <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1">
-              Try searching with different keywords, clear filters, or contribute a package in the Developer portal.
-            </p>
-            <button
-              onClick={() => {
-                setQuery('');
-                setSelectedType('all');
-              }}
-              className="mt-4 px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-800 hover:bg-stone-200"
-            >
-              Reset Filters
-            </button>
+          <div className="text-center py-16 px-6 bg-white rounded-2xl border border-stone-200 p-8 space-y-4 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto">
+              {query ? <Search className="w-6 h-6" /> : <PkgIcon className="w-6 h-6" />}
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-bold text-stone-900">
+                {query
+                  ? 'Nothing to search until someone adds something'
+                  : 'No Libraries in the Registry Yet'}
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                {query
+                  ? `No libraries match "${query}". The registry currently does not have any libraries matching your search.`
+                  : "The website currently doesn't have any libraries. There is nothing to search until someone adds something."}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              {query && (
+                <button
+                  onClick={() => {
+                    setQuery('');
+                    setSelectedType('all');
+                  }}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-stone-100 text-stone-800 hover:bg-stone-200 transition-colors cursor-pointer"
+                >
+                  Clear Search
+                </button>
+              )}
+              {onSelectSection && (
+                <button
+                  onClick={() => onSelectSection('developer')}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Go to Dev Dashboard to Add a Library</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">

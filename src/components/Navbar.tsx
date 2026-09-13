@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentSection, onSelectSection,
             }`}
           >
             <KeyRound className="w-3.5 h-3.5" />
-            <span className="whitespace-nowrap">Publish (OAuth)</span>
+            <span className="whitespace-nowrap">{currentUser ? 'Dev Dashboard' : 'Developer'}</span>
           </button>
         </nav>
 

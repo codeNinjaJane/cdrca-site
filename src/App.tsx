@@ -6,15 +6,16 @@ import { PackageDetail } from './components/PackageDetail';
 import { DeveloperSection } from './components/DeveloperSection';
 import { ContributorProfile } from './components/ContributorProfile';
 import { UserProfile } from './types';
+import { getStoredUser, syncCurrentUser } from './lib/auth';
 import { ExternalLink, Shield } from 'lucide-react';
 
 export default function App() {
   const [currentSection, setCurrentSection] = useState<'download' | 'browse' | 'developer'>('browse');
   const [selectedPackageName, setSelectedPackageName] = useState<string | null>(null);
   const [selectedContributorLogin, setSelectedContributorLogin] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
 
-  // Sync with URL query parameters on initial load
+  // Sync with URL query parameters and restore auth session on initial load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sec = params.get('section');
@@ -31,15 +32,12 @@ export default function App() {
       setCurrentSection(sec);
     }
 
-    // Check user session
-    fetch('/api/auth/me')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.user) {
-          setCurrentUser(data.user);
-        }
+    // Check & synchronize user session with server & Firestore
+    syncCurrentUser()
+      .then((user) => {
+        setCurrentUser(user);
       })
-      .catch((err) => console.warn('Could not fetch user session:', err));
+      .catch((err) => console.warn('Could not sync user session:', err));
   }, []);
 
   const handleSelectSection = (section: 'download' | 'browse' | 'developer') => {
@@ -126,10 +124,13 @@ export default function App() {
               <BrowseSection
                 onSelectPackage={handleSelectPackage}
                 onSelectContributor={handleSelectContributor}
+                onSelectSection={handleSelectSection}
               />
             )}
             {currentSection === 'developer' && (
               <DeveloperSection
+                currentUser={currentUser}
+                onUserChange={setCurrentUser}
                 onPackagePublished={handlePackagePublished}
                 onSelectContributor={handleSelectContributor}
               />

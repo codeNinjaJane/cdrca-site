@@ -7,6 +7,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
   onSnapshot,
@@ -240,8 +241,8 @@ export async function savePackageToFirestore(pkg: PackageRecord): Promise<void> 
   // Ensure default library links are present
   const links: LibraryLinks = pkg.links || {
     repository: pkg.repository,
-    documentation: `https://github.com/Muhammad-Ayyan-no1/${pkg.name}#readme`,
-    demo: `https://cdrca.dev/playground?pkg=${pkg.name}`,
+    documentation: `${pkg.repository}#readme`,
+    demo: '',
     homepage: pkg.repository,
     issues: `${pkg.repository}/issues`,
   };
@@ -264,9 +265,13 @@ export async function updateLibraryLinksInFirestore(pkgName: string, links: Libr
 
   // Also sync with backend API
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cdrca_session_token') : null;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     await fetch(`/api/packages/${encodeURIComponent(pkgName)}/links`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ links }),
     });
   } catch (e) {
@@ -283,9 +288,13 @@ export async function updateLibraryReadmeInFirestore(pkgName: string, readme: st
 
   // Also sync with backend API
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cdrca_session_token') : null;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     await fetch(`/api/packages/${encodeURIComponent(pkgName)}/readme`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ readme }),
     });
   } catch (e) {
@@ -326,20 +335,33 @@ export async function getPackageFromFirestore(name: string): Promise<PackageReco
   }
 }
 
+const LEGACY_DUMMY_PACKAGES = [
+  'calculastic',
+  'vectorial-core',
+  'gl-transpiler-hook',
+  'pendulum-sim',
+  'font-vectorizer',
+  'mpd-streamer',
+];
+
 /**
- * Seeds initial libraries in Firestore if empty
+ * Purges any legacy mock/dummy packages from Firestore so the registry is 100% genuine
  */
-export async function seedFirestoreLibrariesIfEmpty(initialPackages: Record<string, PackageRecord>): Promise<void> {
+export async function purgeDummyPackagesFromFirestore(): Promise<void> {
   try {
-    const snap = await getDocs(collection(db, 'packages'));
-    if (snap.size === 0) {
-      console.log('Seeding initial CDRCA libraries into Firestore database...');
-      for (const [name, pkg] of Object.entries(initialPackages)) {
-        await savePackageToFirestore(pkg);
+    for (const name of LEGACY_DUMMY_PACKAGES) {
+      const docRef = doc(db, 'packages', name);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await deleteDoc(docRef);
+        console.log(`Purged legacy dummy package "${name}" from Firestore`);
       }
-      console.log('Firestore libraries seeded successfully.');
     }
   } catch (err) {
-    console.warn('Notice while checking/seeding Firestore libraries:', err);
+    console.warn('Notice while cleaning legacy dummy packages from Firestore:', err);
   }
 }
+
+// Automatically trigger dummy purge on initialization
+purgeDummyPackagesFromFirestore();
+
