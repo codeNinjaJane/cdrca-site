@@ -1,10 +1,10 @@
 import React from 'react';
-import { Download, Search, KeyRound, Sparkles, ExternalLink, Code2 } from 'lucide-react';
+import { Download, Search, KeyRound, Sparkles, ExternalLink, Code2, BookOpen } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface NavbarProps {
-  currentSection: 'download' | 'browse' | 'developer';
-  onSelectSection: (section: 'download' | 'browse' | 'developer') => void;
+  currentSection: 'download' | 'browse' | 'developer' | 'guide';
+  onSelectSection: (section: 'download' | 'browse' | 'developer' | 'guide') => void;
   currentUser: UserProfile | null;
 }
 
@@ -77,6 +77,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentSection, onSelectSection,
           >
             <KeyRound className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">{currentUser ? 'Dev Dashboard' : 'Developer'}</span>
+          </button>
+
+          {/* Section D: Plugin Guide */}
+          <button
+            id="nav-section-guide"
+            onClick={() => onSelectSection('guide')}
+            className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all ${
+              currentSection === 'guide'
+                ? 'bg-stone-900 text-white shadow-xs'
+                : 'text-stone-600 hover:text-stone-950 hover:bg-stone-100'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="whitespace-nowrap">Build a Plugin</span>
           </button>
         </nav>
 

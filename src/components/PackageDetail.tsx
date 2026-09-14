@@ -24,7 +24,7 @@ import {
   Link as LinkIcon,
   Sparkles,
 } from 'lucide-react';
-import { PackageRecord, PackageType, LibraryLinks } from '../types';
+import { PackageRecord, PackageType, LibraryLinks, SearchResultItem } from '../types';
 import { SecurityBadge } from './SecurityBadge';
 import {
   updateLibraryLinksInFirestore,
@@ -36,6 +36,7 @@ interface PackageDetailProps {
   onBack: () => void;
   onSelectPackage?: (name: string) => void;
   onSelectContributor?: (login: string) => void;
+  onSelectSection?: (section: 'download' | 'browse' | 'developer' | 'guide') => void;
 }
 
 export const PackageDetail: React.FC<PackageDetailProps> = ({
@@ -43,6 +44,7 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
   onBack,
   onSelectPackage,
   onSelectContributor,
+  onSelectSection,
 }) => {
   const [pkg, setPkg] = useState<PackageRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -50,6 +52,8 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
   const [copiedInstall, setCopiedInstall] = useState<boolean>(false);
   const [selectedVersion, setSelectedVersion] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'readme' | 'versions' | 'manifest' | 'dependencies' | 'firestore'>('readme');
+  const [extendingLibraries, setExtendingLibraries] = useState<SearchResultItem[]>([]);
+  const [loadingLibraries, setLoadingLibraries] = useState<boolean>(false);
 
   // Interactive Library Links & Readme editor (persisting to Firestore)
   const [isEditingMetadata, setIsEditingMetadata] = useState<boolean>(false);
@@ -96,6 +100,30 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
       isMounted = false;
     };
   }, [packageName]);
+
+  // Query published library packages that extend this plugin
+  useEffect(() => {
+    if (pkg?.type === 'plugin' && pkg.name) {
+      setLoadingLibraries(true);
+      fetch('/api/search?type=library')
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          const libs = Array.isArray(data) ? data : [];
+          const matches = libs.filter(
+            (lib: SearchResultItem) =>
+              lib.providesFor?.plugin?.toLowerCase() === pkg.name.toLowerCase()
+          );
+          setExtendingLibraries(matches);
+          setLoadingLibraries(false);
+        })
+        .catch((err) => {
+          console.warn('Failed to load extending libraries:', err);
+          setLoadingLibraries(false);
+        });
+    } else {
+      setExtendingLibraries([]);
+    }
+  }, [pkg?.name, pkg?.type]);
 
   const handleCopyInstall = () => {
     if (!pkg) return;
@@ -188,6 +216,8 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
         return <Puzzle className="w-4 h-4" />;
       case 'app':
         return <PlaySquare className="w-4 h-4" />;
+      case 'library':
+        return <Layers className="w-4 h-4" />;
       default:
         return <PkgIcon className="w-4 h-4" />;
     }
@@ -199,6 +229,8 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
         return 'bg-amber-100 text-amber-900 border-amber-300';
       case 'app':
         return 'bg-emerald-100 text-emerald-900 border-emerald-300';
+      case 'library':
+        return 'bg-purple-100 text-purple-900 border-purple-300';
       default:
         return 'bg-stone-100 text-stone-800 border-stone-300';
     }
@@ -231,6 +263,20 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
                 {getTypeIcon(pkg.type)}
                 <span className="capitalize">{pkg.type}</span>
               </span>
+
+              {/* Library Type Context: "Extends <plugin> as @useLib <plugin>.<library>" */}
+              {pkg.type === 'library' && (pkg.providesFor || manifest?.providesFor) && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-mono font-medium bg-purple-50 text-purple-950 border border-purple-200 shadow-2xs">
+                  <Layers className="w-3.5 h-3.5 text-purple-600" />
+                  <span>
+                    Extends <strong className="font-bold text-purple-900 underline decoration-purple-300">{(pkg.providesFor || manifest?.providesFor)?.plugin}</strong> as{' '}
+                    <code className="bg-purple-100 px-1 py-0.5 rounded text-purple-950 font-bold">
+                      @useLib {(pkg.providesFor || manifest?.providesFor)?.plugin}.{(pkg.providesFor || manifest?.providesFor)?.library}
+                    </code>
+                  </span>
+                </span>
+              )}
+
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
                 <Tag className="w-3 h-3 text-stone-500" />
                 <span>v{pkg.latestVersion}</span>
@@ -501,6 +547,110 @@ export const PackageDetail: React.FC<PackageDetailProps> = ({
       {isPlugin && (
         <div className="mb-6">
           <SecurityBadge permissions={pkg.permissions} uses={pkg.uses} />
+        </div>
+      )}
+
+      {/* LIBRARIES EXTENDING THIS PLUGIN (REQUIRED BY SPEC IF TYPE === 'plugin') */}
+      {isPlugin && (
+        <div className="mb-6 bg-white rounded-2xl border border-stone-200 p-6 sm:p-7 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-stone-100">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-600" />
+                <h3 className="text-base font-bold text-stone-900 tracking-tight">
+                  Libraries Extending This Plugin
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                  {extendingLibraries.length}
+                </span>
+              </div>
+              <p className="text-xs text-stone-600">
+                Published packages extending <strong className="font-semibold text-stone-900">{pkg.name}</strong> with custom runtime bundles imported via <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-800 font-mono">@useLib {pkg.name}.&lt;library&gt;</code>.
+              </p>
+            </div>
+          </div>
+
+          {loadingLibraries ? (
+            <div className="p-8 text-center text-xs text-stone-500 font-medium">
+              Scanning registry for compatible extension libraries...
+            </div>
+          ) : extendingLibraries.length === 0 ? (
+            <div className="p-6 rounded-xl bg-stone-50 border border-dashed border-stone-200 text-center space-y-3">
+              <p className="text-xs text-stone-600 font-medium">
+                No external libraries published for <strong className="font-semibold text-stone-900">{pkg.name}</strong> yet.
+              </p>
+              <p className="text-[11px] text-stone-500">
+                Want to build an extension? Create a library package that specifies <code className="font-mono bg-stone-200 px-1.5 py-0.5 rounded text-stone-800">providesFor.plugin: "{pkg.name}"</code> in its <code className="font-mono text-stone-700">cdrca.json</code>.
+              </p>
+              {onSelectSection && (
+                <div className="pt-1">
+                  <button
+                    onClick={() => onSelectSection('guide')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-stone-900 text-xs font-semibold hover:bg-stone-100 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-stone-600" />
+                    <span>Read the Build an Extension Library Guide</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {extendingLibraries.map((lib) => (
+                <div
+                  key={lib.name}
+                  onClick={() => onSelectPackage?.(lib.name)}
+                  className="p-4 rounded-xl border border-stone-200 bg-stone-50/60 hover:bg-white hover:border-purple-300 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-stone-900 group-hover:text-purple-700 transition-colors">
+                        {lib.name}
+                      </span>
+                      <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">
+                        v{lib.latestVersion}
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed">
+                      {lib.description}
+                    </p>
+                    {lib.providesFor?.library && (
+                      <div className="pt-1">
+                        <code className="text-[11px] font-mono px-2 py-0.5 rounded bg-purple-50 text-purple-900 border border-purple-200 block truncate">
+                          @useLib {pkg.name}.{lib.providesFor.library}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-stone-200/60 flex items-center justify-between text-[11px] text-stone-500">
+                    <span>By @{lib.author || 'contributor'}</span>
+                    <span className="group-hover:text-purple-700 font-semibold inline-flex items-center gap-1">
+                      View details →
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Shipped internal bundled libraries if any */}
+          {(pkg.libraries || manifest?.libraries) && Object.keys(pkg.libraries || manifest?.libraries || {}).length > 0 && (
+            <div className="mt-5 pt-4 border-t border-stone-100 space-y-2">
+              <span className="text-xs font-semibold text-stone-700 block">
+                Internal Bundled Modules Shipped with Plugin:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(pkg.libraries || manifest?.libraries || {}).map(([name, bundlePath]) => (
+                  <div key={name} className="px-2.5 py-1 rounded-lg bg-stone-100 border border-stone-200 text-xs font-mono text-stone-800 flex items-center gap-1.5">
+                    <span className="font-bold text-stone-900">@{pkg.name}.{name}</span>
+                    <span className="text-stone-400">→</span>
+                    <span className="text-stone-600">{bundlePath}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

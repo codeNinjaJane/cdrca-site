@@ -102,6 +102,8 @@ export const db = {
           updatedAt: pkg.updatedAt,
           permissions: pkg.permissions,
           uses: pkg.uses,
+          providesFor: pkg.providesFor,
+          libraries: pkg.libraries,
         }));
     }
 
@@ -158,6 +160,8 @@ export const db = {
       updatedAt: pkg.updatedAt,
       permissions: pkg.permissions,
       uses: pkg.uses,
+      providesFor: pkg.providesFor,
+      libraries: pkg.libraries,
     }));
   },
 
@@ -197,6 +201,8 @@ export const db = {
       readme: readme || `# ${manifest.name}\n\n${manifest.description}\n`,
       permissions: manifest.permissions || [],
       uses: manifest.uses || [],
+      providesFor: manifest.providesFor,
+      libraries: manifest.libraries,
       ownerGithubId: owner.githubId,
       ownerLogin: owner.login,
       versions: {
@@ -257,6 +263,8 @@ export const db = {
     record.repository = manifest.repository;
     record.permissions = manifest.permissions || [];
     record.uses = manifest.uses || [];
+    record.providesFor = manifest.providesFor;
+    record.libraries = manifest.libraries;
     if (readme) {
       record.readme = readme;
     }

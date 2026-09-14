@@ -5,12 +5,13 @@ import { BrowseSection } from './components/BrowseSection';
 import { PackageDetail } from './components/PackageDetail';
 import { DeveloperSection } from './components/DeveloperSection';
 import { ContributorProfile } from './components/ContributorProfile';
+import { PluginGuide } from './components/PluginGuide';
 import { UserProfile } from './types';
 import { getStoredUser, syncCurrentUser } from './lib/auth';
 import { ExternalLink, Shield } from 'lucide-react';
 
 export default function App() {
-  const [currentSection, setCurrentSection] = useState<'download' | 'browse' | 'developer'>('browse');
+  const [currentSection, setCurrentSection] = useState<'download' | 'browse' | 'developer' | 'guide'>('browse');
   const [selectedPackageName, setSelectedPackageName] = useState<string | null>(null);
   const [selectedContributorLogin, setSelectedContributorLogin] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
@@ -28,7 +29,7 @@ export default function App() {
     } else if (pkg) {
       setSelectedPackageName(pkg);
       setCurrentSection('browse');
-    } else if (sec === 'download' || sec === 'browse' || sec === 'developer') {
+    } else if (sec === 'download' || sec === 'browse' || sec === 'developer' || sec === 'guide') {
       setCurrentSection(sec);
     }
 
@@ -40,7 +41,7 @@ export default function App() {
       .catch((err) => console.warn('Could not sync user session:', err));
   }, []);
 
-  const handleSelectSection = (section: 'download' | 'browse' | 'developer') => {
+  const handleSelectSection = (section: 'download' | 'browse' | 'developer' | 'guide') => {
     setCurrentSection(section);
     setSelectedPackageName(null);
     setSelectedContributorLogin(null);
@@ -116,6 +117,7 @@ export default function App() {
             onBack={handleBackToBrowse}
             onSelectPackage={handleSelectPackage}
             onSelectContributor={handleSelectContributor}
+            onSelectSection={handleSelectSection}
           />
         ) : (
           <>
@@ -133,6 +135,13 @@ export default function App() {
                 onUserChange={setCurrentUser}
                 onPackagePublished={handlePackagePublished}
                 onSelectContributor={handleSelectContributor}
+                onSelectSection={handleSelectSection}
+              />
+            )}
+            {currentSection === 'guide' && (
+              <PluginGuide
+                onBackToBrowse={handleBackToBrowse}
+                onGoToDeveloper={() => handleSelectSection('developer')}
               />
             )}
           </>
@@ -175,6 +184,13 @@ export default function App() {
                 className="hover:text-stone-950 transition-colors"
               >
                 Publish
+              </button>
+              <span>•</span>
+              <button
+                onClick={() => handleSelectSection('guide')}
+                className="hover:text-stone-950 transition-colors"
+              >
+                Build a Plugin Guide
               </button>
               <span>•</span>
               <a

@@ -96,11 +96,11 @@ function validateManifest(manifest: any): { valid: boolean; error?: string } {
     }
   }
 
-  const validTypes: PackageType[] = ['package', 'plugin', 'app'];
+  const validTypes: PackageType[] = ['package', 'plugin', 'app', 'library'];
   if (!validTypes.includes(manifest.type)) {
     return {
       valid: false,
-      error: `Invalid package type "${manifest.type}". Must be exactly one of: "package", "plugin", "app".`,
+      error: `Invalid package type "${manifest.type}". Must be exactly one of: "package", "plugin", "app", "library".`,
     };
   }
 
@@ -116,6 +116,36 @@ function validateManifest(manifest: any): { valid: boolean; error?: string } {
       return {
         valid: false,
         error: 'Plugin packages must declare a "uses" array of [hookType, hookProcess] pairs in cdrca.json.',
+      };
+    }
+  }
+
+  // If type is "library", require providesFor.plugin and providesFor.library as non-empty strings,
+  // and validate providesFor.plugin against either the built-in allowlist (quark) or a real published type: "plugin" package
+  if (manifest.type === 'library') {
+    if (
+      !manifest.providesFor ||
+      typeof manifest.providesFor !== 'object' ||
+      !manifest.providesFor.plugin ||
+      typeof manifest.providesFor.plugin !== 'string' ||
+      manifest.providesFor.plugin.trim() === '' ||
+      !manifest.providesFor.library ||
+      typeof manifest.providesFor.library !== 'string' ||
+      manifest.providesFor.library.trim() === ''
+    ) {
+      return {
+        valid: false,
+        error: 'Library packages must declare "providesFor" with non-empty "plugin" and "library" strings in cdrca.json (e.g. {"plugin": "quark", "library": "icons"}).',
+      };
+    }
+
+    const pluginName = manifest.providesFor.plugin.trim().toLowerCase();
+    const isBuiltIn = pluginName === 'quark';
+    const publishedPlugin = isBuiltIn ? null : db.getPackage(pluginName);
+    if (!isBuiltIn && (!publishedPlugin || publishedPlugin.type !== 'plugin')) {
+      return {
+        valid: false,
+        error: `Plugin "${manifest.providesFor.plugin}" declared in providesFor.plugin does not exist as a published plugin in the registry. It must be either "quark" or a registered plugin.`,
       };
     }
   }
@@ -322,6 +352,8 @@ apiRouter.get('/packages/:name', (req, res) => {
     repository: pkg.repository,
     permissions: pkg.permissions,
     uses: pkg.uses,
+    providesFor: pkg.providesFor,
+    libraries: pkg.libraries,
   };
 
   // Response object satisfying exact CLI contract while supporting full web UI
@@ -342,6 +374,8 @@ apiRouter.get('/packages/:name', (req, res) => {
     updatedAt: pkg.updatedAt,
     permissions: pkg.permissions,
     uses: pkg.uses,
+    providesFor: pkg.providesFor,
+    libraries: pkg.libraries,
     ownerLogin: pkg.ownerLogin,
     links: pkg.links || {
       repository: pkg.repository,

@@ -63,6 +63,7 @@ interface DeveloperSectionProps {
   onSelectContributor?: (login: string) => void;
   currentUser?: UserProfile | null;
   onUserChange?: (user: UserProfile | null) => void;
+  onSelectSection?: (section: 'download' | 'browse' | 'developer' | 'guide') => void;
 }
 
 export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
@@ -70,6 +71,7 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
   onSelectContributor,
   currentUser: propCurrentUser,
   onUserChange,
+  onSelectSection,
 }) => {
   const [internalUser, setInternalUser] = useState<UserProfile | null>(() =>
     propCurrentUser !== undefined ? propCurrentUser : getStoredUser()
@@ -146,6 +148,7 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
   const [publishing, setPublishing] = useState<boolean>(false);
   const [publishStatus, setPublishStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [justPublishedName, setJustPublishedName] = useState<string>('');
+  const [availablePlugins, setAvailablePlugins] = useState<string[]>(['quark']);
 
   // Setup modal & copy helpers
   const [showSetupModal, setShowSetupModal] = useState<boolean>(false);
@@ -241,6 +244,18 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
 
     window.addEventListener('message', handleAuthMessage);
     return () => window.removeEventListener('message', handleAuthMessage);
+  }, []);
+
+  // Load published plugins for extending
+  useEffect(() => {
+    fetch('/api/search?type=plugin')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        const pluginNames = Array.isArray(data) ? data.map((p: any) => p.name) : [];
+        const combined = Array.from(new Set(['quark', ...pluginNames]));
+        setAvailablePlugins(combined);
+      })
+      .catch(() => {});
   }, []);
 
   // Fetch user's repositories and published packages once authenticated
@@ -1405,19 +1420,48 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
                   {/* TAB 2: TYPE & PERMISSIONS */}
                   {activeFormTab === 'plugin' && (
                     <div className="space-y-4 text-xs">
+                      {onSelectSection && (
+                        <div className="p-3 bg-stone-100/90 rounded-xl border border-stone-200 flex items-center justify-between text-xs text-stone-700">
+                          <span className="text-[11px] text-stone-600">
+                            Need help understanding tiers, permissions, or extension libraries?
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onSelectSection('guide')}
+                            className="font-bold text-stone-900 underline hover:text-black cursor-pointer text-xs shrink-0 inline-flex items-center gap-1"
+                          >
+                            <span>Read the Plugin Architecture Guide →</span>
+                          </button>
+                        </div>
+                      )}
                       <div>
                         <label className="font-bold text-stone-700 block mb-1.5">Package Type</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {(['package', 'plugin', 'app'] as PackageType[]).map((t) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                          {([
+                            { type: 'package' as PackageType, label: 'Package', desc: 'Math primitives & curves' },
+                            { type: 'plugin' as PackageType, label: 'Plugin', desc: 'Compiler hook or AST transpiler' },
+                            { type: 'app' as PackageType, label: 'App', desc: 'Interactive animation applet' },
+                            { type: 'library' as PackageType, label: 'Library', desc: 'Extends a plugin (@useLib)' },
+                          ]).map(({ type: t, label, desc }) => (
                             <div
                               key={t}
                               onClick={() => {
                                 const defaultEntry =
-                                  t === 'package' ? 'src/main.cdrca' : t === 'plugin' ? 'dist/index.js' : 'app/index.cdrca';
+                                  t === 'package'
+                                    ? 'src/main.cdrca'
+                                    : t === 'plugin'
+                                    ? 'dist/index.js'
+                                    : t === 'library'
+                                    ? 'dist/bundle.js'
+                                    : 'app/index.cdrca';
                                 setManifest({
                                   ...manifest,
                                   type: t,
                                   entry: defaultEntry,
+                                  providesFor:
+                                    t === 'library'
+                                      ? manifest.providesFor || { plugin: 'quark', library: '' }
+                                      : manifest.providesFor,
                                   permissions: t === 'plugin' ? ['trusted', 'fileRead'] : [],
                                   uses: t === 'plugin' ? [['before', 'transpile']] : [],
                                 });
@@ -1428,33 +1472,206 @@ export const DeveloperSection: React.FC<DeveloperSectionProps> = ({
                                   : 'bg-stone-50 text-stone-800 border-stone-200 hover:bg-stone-100'
                               }`}
                             >
-                              <div className="font-bold capitalize">{t}</div>
+                              <div className="font-bold capitalize">{label}</div>
                               <div
                                 className={`text-[11px] mt-0.5 ${
                                   manifest.type === t ? 'text-stone-300' : 'text-stone-500'
                                 }`}
                               >
-                                {t === 'package'
-                                  ? 'Reusable math primitives & curves'
-                                  : t === 'plugin'
-                                  ? 'Compiler hook or AST exporter'
-                                  : 'Interactive animation applet'}
+                                {desc}
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
 
+                      {/* When Library: Swapped in fields for Plugin Extension */}
+                      {manifest.type === 'library' && (
+                        <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-3.5">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-purple-700" />
+                            <span className="font-bold text-purple-900">Plugin Extension Specification</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="font-bold text-stone-800 block mb-1">
+                                Extends Plugin <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                list="published-plugins-list"
+                                value={manifest.providesFor?.plugin || ''}
+                                onChange={(e) =>
+                                  setManifest({
+                                    ...manifest,
+                                    providesFor: {
+                                      plugin: e.target.value.toLowerCase().trim(),
+                                      library: manifest.providesFor?.library || '',
+                                    },
+                                  })
+                                }
+                                placeholder="e.g. quark or published plugin"
+                                className="w-full px-3 py-2 bg-white border border-purple-300 rounded-lg text-stone-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                              <datalist id="published-plugins-list">
+                                {availablePlugins.map((p) => (
+                                  <option key={p} value={p} />
+                                ))}
+                              </datalist>
+                              <div className="flex items-center gap-1 mt-1 text-[11px] text-stone-500">
+                                <span>Built-ins:</span>
+                                {['quark'].map((builtIn) => (
+                                  <button
+                                    key={builtIn}
+                                    type="button"
+                                    onClick={() =>
+                                      setManifest({
+                                        ...manifest,
+                                        providesFor: {
+                                          plugin: builtIn,
+                                          library: manifest.providesFor?.library || '',
+                                        },
+                                      })
+                                    }
+                                    className="px-1.5 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-mono text-[10px]"
+                                  >
+                                    {builtIn}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="font-bold text-stone-800 block mb-1">
+                                Library Bundle Name <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={manifest.providesFor?.library || ''}
+                                onChange={(e) =>
+                                  setManifest({
+                                    ...manifest,
+                                    providesFor: {
+                                      plugin: manifest.providesFor?.plugin || 'quark',
+                                      library: e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''),
+                                    },
+                                  })
+                                }
+                                placeholder="e.g. icons (name after dot in @useLib)"
+                                className="w-full px-3 py-2 bg-white border border-purple-300 rounded-lg text-stone-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                              <p className="text-[11px] text-purple-800 mt-1 font-mono">
+                                @useLib {manifest.providesFor?.plugin || 'quark'}.{manifest.providesFor?.library || '<name>'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Entry File / Built JS bundle path */}
                       <div>
-                        <label className="font-bold text-stone-700 block mb-1">Entry File</label>
+                        <label className="font-bold text-stone-700 block mb-1">
+                          {manifest.type === 'library' ? 'Built JS bundle path' : 'Entry File'}{' '}
+                          <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="text"
                           required
                           value={manifest.entry}
                           onChange={(e) => setManifest({ ...manifest, entry: e.target.value })}
+                          placeholder={manifest.type === 'library' ? 'dist/bundle.js' : 'src/main.cdrca'}
                           className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-mono text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-stone-400"
                         />
+                        <p className="text-[11px] text-stone-400 mt-1">
+                          {manifest.type === 'library'
+                            ? 'The compiled JavaScript runtime bundle provided to the parent transpiler plugin.'
+                            : 'Primary entry file inside the package bundle.'}
+                        </p>
                       </div>
+
+                      {/* Repeatable Libraries list for Plugin type */}
+                      {manifest.type === 'plugin' && (
+                        <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <label className="font-bold text-stone-800 block">Shipped Bundled Libraries (Optional)</label>
+                              <p className="text-[11px] text-stone-500">
+                                Declare internal runtime bundles shipped directly by this plugin (name → path).
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = { ...(manifest.libraries || {}) };
+                                const nextNum = Object.keys(current).length + 1;
+                                current[`core${nextNum > 1 ? nextNum : ''}`] = `dist/core.js`;
+                                setManifest({ ...manifest, libraries: current });
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-800 text-[11px] font-semibold transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Add Library</span>
+                            </button>
+                          </div>
+
+                          {Object.keys(manifest.libraries || {}).length === 0 ? (
+                            <div className="text-[11px] text-stone-400 italic bg-white p-2.5 rounded-lg border border-dashed border-stone-200">
+                              No bundled libraries declared. Click "+ Add Library" if this plugin ships built-in runtime modules.
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {Object.entries(manifest.libraries || {}).map(([libName, libPath], idx) => (
+                                <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-stone-200">
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      value={libName}
+                                      onChange={(e) => {
+                                        const newName = e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '');
+                                        const current = { ...(manifest.libraries || {}) };
+                                        delete current[libName];
+                                        current[newName] = libPath;
+                                        setManifest({ ...manifest, libraries: current });
+                                      }}
+                                      placeholder="Library name (e.g. core)"
+                                      className="w-full px-2 py-1 bg-stone-50 border border-stone-200 rounded font-mono text-xs"
+                                    />
+                                  </div>
+                                  <span className="text-stone-400 font-mono">→</span>
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      value={libPath}
+                                      onChange={(e) => {
+                                        const current = { ...(manifest.libraries || {}) };
+                                        current[libName] = e.target.value;
+                                        setManifest({ ...manifest, libraries: current });
+                                      }}
+                                      placeholder="Bundle path (e.g. dist/core.js)"
+                                      className="w-full px-2 py-1 bg-stone-50 border border-stone-200 rounded font-mono text-xs"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = { ...(manifest.libraries || {}) };
+                                      delete current[libName];
+                                      setManifest({ ...manifest, libraries: current });
+                                    }}
+                                    className="p-1.5 text-stone-400 hover:text-red-600 rounded hover:bg-red-50"
+                                    title="Remove library"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {manifest.type === 'plugin' && (
                         <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-3">

@@ -1,4 +1,4 @@
-export type PackageType = 'package' | 'plugin' | 'app';
+export type PackageType = 'package' | 'plugin' | 'app' | 'library';
 
 export interface CdrcaManifest {
   name: string;
@@ -13,6 +13,11 @@ export interface CdrcaManifest {
   dependencies?: Record<string, string>;
   permissions: string[];
   uses: [string, string][];
+  providesFor?: {
+    plugin: string;
+    library: string;
+  };
+  libraries?: Record<string, string>;
 }
 
 export interface PackageVersion {
@@ -52,6 +57,11 @@ export interface PackageRecord {
   ownerLogin: string;
   links?: LibraryLinks;
   tags?: string[];
+  providesFor?: {
+    plugin: string;
+    library: string;
+  };
+  libraries?: Record<string, string>;
 }
 
 // Exact contract response shapes matching CLI spec
@@ -83,6 +93,11 @@ export interface SearchResultItem {
   updatedAt?: string;
   permissions?: string[];
   uses?: [string, string][];
+  providesFor?: {
+    plugin: string;
+    library: string;
+  };
+  libraries?: Record<string, string>;
 }
 
 export interface UserProfile {

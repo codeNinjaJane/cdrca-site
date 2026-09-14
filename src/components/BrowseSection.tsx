@@ -7,6 +7,7 @@ import {
   Package as PkgIcon,
   Puzzle,
   PlaySquare,
+  Layers,
   Copy,
   Check,
   ArrowRight,
@@ -19,22 +20,30 @@ import { SecurityBadge } from './SecurityBadge';
 interface BrowseSectionProps {
   onSelectPackage: (name: string) => void;
   onSelectContributor?: (login: string) => void;
-  onSelectSection?: (section: 'download' | 'browse' | 'developer') => void;
+  onSelectSection?: (section: 'download' | 'browse' | 'developer' | 'guide') => void;
+  initialType?: string;
 }
 
 export const BrowseSection: React.FC<BrowseSectionProps> = ({
   onSelectPackage,
   onSelectContributor,
   onSelectSection,
+  initialType,
 }) => {
   const [query, setQuery] = useState<string>('');
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>(initialType || 'all');
   const [selectedSort, setSelectedSort] = useState<'trending' | 'recent' | 'name'>('trending');
   const [packages, setPackages] = useState<PackageRecord[]>([]);
   const [trending, setTrending] = useState<PackageRecord[]>([]);
   const [recent, setRecent] = useState<PackageRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [copiedPkg, setCopiedPkg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialType) {
+      setSelectedType(initialType);
+    }
+  }, [initialType]);
 
   // Fetch directory data
   useEffect(() => {
@@ -93,6 +102,8 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({
         return <Puzzle className="w-3.5 h-3.5 text-amber-700" />;
       case 'app':
         return <PlaySquare className="w-3.5 h-3.5 text-emerald-700" />;
+      case 'library':
+        return <Layers className="w-3.5 h-3.5 text-purple-700" />;
       default:
         return <PkgIcon className="w-3.5 h-3.5 text-stone-700" />;
     }
@@ -104,6 +115,8 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({
         return 'bg-amber-50 text-amber-900 border-amber-300';
       case 'app':
         return 'bg-emerald-50 text-emerald-900 border-emerald-300';
+      case 'library':
+        return 'bg-purple-50 text-purple-900 border-purple-300';
       default:
         return 'bg-stone-100 text-stone-800 border-stone-300';
     }
@@ -156,6 +169,7 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({
                 { id: 'package', label: 'Packages (.cdrca)' },
                 { id: 'plugin', label: 'Transpiler Plugins' },
                 { id: 'app', label: 'Standalone Apps' },
+                { id: 'library', label: 'Plugin Libraries' },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -270,6 +284,50 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Type-specific Informational Banners */}
+      {selectedType === 'plugin' && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 flex items-start gap-3.5 text-xs text-amber-900 shadow-2xs">
+          <Puzzle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <div className="space-y-1.5 flex-1">
+            <span className="font-bold text-amber-950 block">Transpiler Plugins</span>
+            <p className="text-amber-800/90 leading-relaxed">
+              Plugins hook into compile-time or runtime pipelines to transform CDRCA code. Click into any plugin below to inspect permissions and view all published extension libraries built for it.
+            </p>
+            {onSelectSection && (
+              <div className="pt-1">
+                <button
+                  onClick={() => onSelectSection('guide')}
+                  className="font-bold text-amber-950 underline hover:text-black cursor-pointer inline-flex items-center gap-1"
+                >
+                  <span>Read the Plugin Architecture Guide →</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {selectedType === 'library' && (
+        <div className="mb-6 p-4 rounded-2xl bg-purple-50/90 border border-purple-200/80 flex items-start gap-3.5 text-xs text-purple-900 shadow-2xs">
+          <Layers className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+          <div className="space-y-1.5 flex-1">
+            <span className="font-bold text-purple-950 block">Plugin Extension Libraries</span>
+            <p className="text-purple-800/90 leading-relaxed">
+              Extension libraries extend transpiler plugins (like Quark) with modular capabilities. Use them in user projects with <code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-purple-950">@useLib &lt;plugin&gt;.&lt;library&gt;</code>.
+            </p>
+            {onSelectSection && (
+              <div className="pt-1">
+                <button
+                  onClick={() => onSelectSection('guide')}
+                  className="font-bold text-purple-950 underline hover:text-black cursor-pointer inline-flex items-center gap-1"
+                >
+                  <span>Learn How to Build a Plugin Extension Library →</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -392,6 +450,18 @@ export const BrowseSection: React.FC<BrowseSectionProps> = ({
                   {pkg.type === 'plugin' && (
                     <div className="pt-1.5">
                       <SecurityBadge permissions={pkg.permissions} uses={pkg.uses} compact={true} />
+                    </div>
+                  )}
+
+                  {/* Library Type Information */}
+                  {pkg.type === 'library' && pkg.providesFor && (
+                    <div className="pt-1">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-mono font-medium bg-purple-50 text-purple-900 border border-purple-200">
+                        <Layers className="w-3 h-3 text-purple-600" />
+                        <span>
+                          Extends <strong>{pkg.providesFor.plugin}</strong> · <code className="text-purple-950 font-bold">@useLib {pkg.providesFor.plugin}.{pkg.providesFor.library}</code>
+                        </span>
+                      </span>
                     </div>
                   )}
                 </div>

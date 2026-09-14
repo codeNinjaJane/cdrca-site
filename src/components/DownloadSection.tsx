@@ -35,7 +35,7 @@ export const DownloadSection: React.FC = () => {
       {/* Main Download Actions Card */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden mb-8">
         <div className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-center border-b border-stone-100">
-          {/* Windows Installer */}
+          {/* Desktop Installer via GitHub Actions */}
           <div className="space-y-4">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-stone-100 text-stone-800 border border-stone-200">
               <Download className="w-6 h-6" />
@@ -43,21 +43,31 @@ export const DownloadSection: React.FC = () => {
             <div>
               <h2 className="text-xl font-bold text-stone-900">Desktop Installer</h2>
               <p className="text-sm text-stone-600 mt-1">
-                Official standalone Windows installer (.exe) including compiler binary, preview runner, and path integration.
+                Download the standalone desktop installer, compiler binary, and preview runtime from automated CI workflow builds.
               </p>
             </div>
-            <div>
+            <div className="space-y-2">
               <a
                 id="btn-download-installer"
-                href="/downloads/cdrca-setup-latest.exe"
-                download="cdrca-setup-v1.0.0-win64.exe"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-950 font-medium text-sm transition-colors shadow-xs w-full sm:w-auto"
+                href="https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/actions"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-950 font-medium text-sm transition-colors shadow-xs w-full sm:w-auto cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Download Installer (.exe)</span>
+                <span>Fetch Installer from Actions</span>
+                <ExternalLink className="w-3.5 h-3.5 text-stone-400" />
               </a>
-              <div className="mt-2 text-xs text-stone-500">
-                Windows 10 / 11 (64-bit) • v1.0.0 Stable
+              <div className="text-xs text-stone-500">
+                Latest artifacts available under the workflow runs on{' '}
+                <a
+                  href="https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/actions"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-stone-800 underline hover:text-black"
+                >
+                  MrGrimJoe / cdrca-ready-for-the-real-world
+                </a>
               </div>
             </div>
           </div>
@@ -69,13 +79,13 @@ export const DownloadSection: React.FC = () => {
               <h3 className="text-sm font-semibold text-stone-900">Install via npm</h3>
             </div>
             <p className="text-xs text-stone-600">
-              Add the CDRCA transpiler package to any Node.js or web animation pipeline:
+              Add the CDRCA package to any Node.js project or pipeline:
             </p>
             <div className="relative flex items-center justify-between p-3 bg-stone-900 text-stone-100 rounded-lg font-mono text-sm border border-stone-800">
-              <span className="select-all">npm install cdrca</span>
+              <span className="select-all">npm install cdcra12</span>
               <button
                 id="btn-copy-npm-install"
-                onClick={() => handleCopy('npm install cdrca', 'npm')}
+                onClick={() => handleCopy('npm install cdcra12', 'npm')}
                 className="ml-3 p-1.5 rounded-md hover:bg-stone-800 text-stone-300 hover:text-white transition-colors"
                 title="Copy command"
                 type="button"
@@ -88,10 +98,10 @@ export const DownloadSection: React.FC = () => {
             <div className="pt-2 border-t border-stone-200">
               <span className="text-xs text-stone-500 block mb-1.5">Or install globally for system-wide CLI usage:</span>
               <div className="flex items-center justify-between p-2.5 bg-white text-stone-800 rounded-md font-mono text-xs border border-stone-300">
-                <span className="select-all">npm install -g cdrca</span>
+                <span className="select-all">npm install -g cdcra12</span>
                 <button
                   id="btn-copy-global-install"
-                  onClick={() => handleCopy('npm install -g cdrca', 'global')}
+                  onClick={() => handleCopy('npm install -g cdcra12', 'global')}
                   className="p-1 rounded hover:bg-stone-100 text-stone-600 hover:text-stone-900 transition-colors"
                   title="Copy global command"
                   type="button"
@@ -125,8 +135,18 @@ export const DownloadSection: React.FC = () => {
             CDRCA is a JavaScript-based animation Domain-Specific Language conceived and created by <strong>Muhammad Ayyan</strong>. It features a declarative scene graph syntax that compiles directly into high-fps rendering instructions.
           </p>
           <div className="space-y-2 pt-2 border-t border-stone-100 text-xs">
-            <div className="text-stone-500 font-medium">Official Repositories:</div>
+            <div className="text-stone-500 font-medium">Official Repositories &amp; Builds:</div>
             <div className="flex flex-col gap-1.5">
+              <a
+                id="link-grimjoe-repo"
+                href="https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-stone-800 hover:text-stone-950 underline underline-offset-2 font-medium"
+              >
+                <span>MrGrimJoe / cdrca-ready-for-the-real-world (CI &amp; Installer Actions)</span>
+                <ExternalLink className="w-3 h-3 text-stone-500" />
+              </a>
               <a
                 id="link-canonical-repo"
                 href="https://github.com/Muhammad-Ayyan-no1/CDRCA-animation-dsl"
