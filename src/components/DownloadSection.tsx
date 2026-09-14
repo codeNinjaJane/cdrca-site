@@ -1,9 +1,64 @@
-import React, { useState } from 'react';
-import { Download, Copy, Check, ExternalLink, Terminal, Sparkles, BookOpen, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, Copy, Check, ExternalLink, Terminal, Sparkles, BookOpen, ShieldCheck, Loader2, HardDrive, PackageCheck } from 'lucide-react';
+
+interface ReleaseInfo {
+  version: string;
+  publishedAt: string;
+  htmlUrl: string;
+  installer: {
+    name: string;
+    size: number;
+    downloadUrl: string;
+  };
+  portable: {
+    name: string;
+    size: number;
+    downloadUrl: string;
+  } | null;
+}
 
 export const DownloadSection: React.FC = () => {
   const [copiedNpm, setCopiedNpm] = useState(false);
   const [copiedGlobal, setCopiedGlobal] = useState(false);
+  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo>({
+    version: 'v0.2.0',
+    publishedAt: '2026-09-13T13:19:22Z',
+    htmlUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/tag/v0.2.0',
+    installer: {
+      name: 'cdrca-installer.exe',
+      size: 7371948,
+      downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-installer.exe',
+    },
+    portable: {
+      name: 'cdrca-win32-x64.exe',
+      size: 4972544,
+      downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-win32-x64.exe',
+    },
+  });
+  const [isFetchingRelease, setIsFetchingRelease] = useState(false);
+  const [downloadStarted, setDownloadStarted] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsFetchingRelease(true);
+    fetch('/api/download/latest-installer')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data && data.success && data.installer) {
+          setReleaseInfo(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not query dynamic installer release:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsFetchingRelease(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleCopy = (text: string, type: 'npm' | 'global') => {
     navigator.clipboard.writeText(text);
@@ -13,6 +68,30 @@ export const DownloadSection: React.FC = () => {
     } else {
       setCopiedGlobal(true);
       setTimeout(() => setCopiedGlobal(false), 2000);
+    }
+  };
+
+  const handleDownloadClick = () => {
+    setDownloadStarted(true);
+    setTimeout(() => setDownloadStarted(false), 4000);
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (!bytes || bytes <= 0) return '';
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(2)} MB`;
+  };
+
+  const formatDate = (isoStr: string): string => {
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return '';
     }
   };
 
@@ -34,39 +113,86 @@ export const DownloadSection: React.FC = () => {
 
       {/* Main Download Actions Card */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden mb-8">
-        <div className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-center border-b border-stone-100">
-          {/* Desktop Installer via GitHub Actions */}
+        <div className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start border-b border-stone-100">
+          {/* Desktop Installer direct auto-fetch */}
           <div className="space-y-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-stone-100 text-stone-800 border border-stone-200">
-              <Download className="w-6 h-6" />
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-stone-100 text-stone-800 border border-stone-200">
+                <Download className="w-6 h-6" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>{releaseInfo.version}</span>
+                </span>
+                {formatDate(releaseInfo.publishedAt) && (
+                  <span className="text-[11px] text-stone-400">
+                    {formatDate(releaseInfo.publishedAt)}
+                  </span>
+                )}
+              </div>
             </div>
+
             <div>
               <h2 className="text-xl font-bold text-stone-900">Desktop Installer</h2>
               <p className="text-sm text-stone-600 mt-1">
-                Download the standalone desktop installer, compiler binary, and preview runtime from automated CI workflow builds.
+                Official standalone Windows installer (.exe) with compiler toolchain, runtime preview, and PATH environment configuration.
               </p>
             </div>
-            <div className="space-y-2">
+
+            <div className="space-y-3 pt-1">
+              {/* Primary Direct Download Button */}
               <a
                 id="btn-download-installer"
-                href="https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/actions"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-950 font-medium text-sm transition-colors shadow-xs w-full sm:w-auto cursor-pointer"
+                href={releaseInfo.installer.downloadUrl}
+                download={releaseInfo.installer.name}
+                onClick={handleDownloadClick}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-950 font-medium text-sm transition-all shadow-xs w-full sm:w-auto cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Fetch Installer from Actions</span>
-                <ExternalLink className="w-3.5 h-3.5 text-stone-400" />
+                <span>
+                  Download {releaseInfo.installer.name}{' '}
+                  {releaseInfo.installer.size > 0 && (
+                    <span className="opacity-70 font-normal">({formatFileSize(releaseInfo.installer.size)})</span>
+                  )}
+                </span>
               </a>
-              <div className="text-xs text-stone-500">
-                Latest artifacts available under the workflow runs on{' '}
+
+              {downloadStarted && (
+                <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-800 text-xs border border-emerald-200 flex items-center gap-2 animate-in fade-in duration-200">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Download started! Check your browser's downloads tray.</span>
+                </div>
+              )}
+
+              {/* Secondary portable executable direct link */}
+              {releaseInfo.portable && (
+                <div className="pt-1 flex items-center gap-2 text-xs text-stone-600">
+                  <HardDrive className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Prefer portable binary?</span>
+                  <a
+                    id="link-download-portable"
+                    href={releaseInfo.portable.downloadUrl}
+                    download={releaseInfo.portable.name}
+                    className="font-semibold text-stone-900 hover:text-black underline underline-offset-2 inline-flex items-center gap-1"
+                  >
+                    <span>{releaseInfo.portable.name}</span>
+                    <span className="text-stone-400 font-normal">({formatFileSize(releaseInfo.portable.size)})</span>
+                  </a>
+                </div>
+              )}
+
+              {/* CI Workflow Runs and Repo reference */}
+              <div className="pt-2 border-t border-stone-100 text-xs text-stone-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>Built automatically by GitHub Actions on</span>
                 <a
                   href="https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/actions"
                   target="_blank"
                   rel="noreferrer"
-                  className="font-medium text-stone-800 underline hover:text-black"
+                  className="font-medium text-stone-800 underline hover:text-black inline-flex items-center gap-1"
                 >
-                  MrGrimJoe / cdrca-ready-for-the-real-world
+                  <span>CI Workflow Runs</span>
+                  <ExternalLink className="w-3 h-3 text-stone-400" />
                 </a>
               </div>
             </div>

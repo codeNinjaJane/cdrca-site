@@ -1493,3 +1493,85 @@ apiRouter.post('/packages/register', requireAuth, async (req, res) => {
     res.status(400).json({ error: e.message });
   }
 });
+
+// GET /api/download/latest-installer - Returns latest release assets and direct download links
+apiRouter.get('/download/latest-installer', async (req: Request, res: Response) => {
+  try {
+    const ghRes = await fetch('https://api.github.com/repos/MrGrimJoe/cdrca-ready-for-the-real-world/releases/latest', {
+      headers: {
+        'User-Agent': 'CDRCA-Registry-Web/1.0',
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!ghRes.ok) {
+      // Fallback data if GitHub rate limits unauthenticated requests
+      return res.json({
+        success: true,
+        version: 'v0.2.0',
+        publishedAt: '2026-09-13T13:19:22Z',
+        htmlUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/tag/v0.2.0',
+        installer: {
+          name: 'cdrca-installer.exe',
+          size: 7371948,
+          downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-installer.exe',
+        },
+        portable: {
+          name: 'cdrca-win32-x64.exe',
+          size: 4972544,
+          downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-win32-x64.exe',
+        },
+      });
+    }
+
+    const releaseData = await ghRes.json();
+    const assets: any[] = releaseData.assets || [];
+
+    const installerAsset = assets.find((a) => a.name === 'cdrca-installer.exe') || assets.find((a) => a.name.endsWith('.exe'));
+    const portableAsset = assets.find((a) => a.name === 'cdrca-win32-x64.exe') || assets.find((a) => a.name !== installerAsset?.name && a.name.endsWith('.exe'));
+
+    res.json({
+      success: true,
+      version: releaseData.tag_name || releaseData.name || 'latest',
+      publishedAt: releaseData.published_at || releaseData.created_at,
+      htmlUrl: releaseData.html_url || 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases',
+      installer: installerAsset
+        ? {
+            name: installerAsset.name,
+            size: installerAsset.size,
+            downloadUrl: installerAsset.browser_download_url,
+          }
+        : {
+            name: 'cdrca-installer.exe',
+            size: 7371948,
+            downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-installer.exe',
+          },
+      portable: portableAsset
+        ? {
+            name: portableAsset.name,
+            size: portableAsset.size,
+            downloadUrl: portableAsset.browser_download_url,
+          }
+        : null,
+    });
+  } catch (err: any) {
+    // Graceful fallback
+    res.json({
+      success: true,
+      version: 'v0.2.0',
+      publishedAt: '2026-09-13T13:19:22Z',
+      htmlUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/tag/v0.2.0',
+      installer: {
+        name: 'cdrca-installer.exe',
+        size: 7371948,
+        downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-installer.exe',
+      },
+      portable: {
+        name: 'cdrca-win32-x64.exe',
+        size: 4972544,
+        downloadUrl: 'https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-win32-x64.exe',
+      },
+    });
+  }
+});
+

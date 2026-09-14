@@ -27,11 +27,9 @@ async function startServer() {
   const { handleGitHubOAuthCallback } = await import('./server/api');
   app.get(['/auth/callback', '/auth/callback/'], handleGitHubOAuthCallback);
 
-  // Direct download handler for installer link
-  app.get('/downloads/cdrca-setup-latest.exe', (req, res) => {
-    res.setHeader('Content-Disposition', 'attachment; filename="cdrca-setup-v1.0.0-win64.exe"');
-    res.setHeader('Content-Type', 'application/octet-stream');
-    res.send(Buffer.from('CDRCA Animation DSL Windows Installer Executable\nCanonical: https://github.com/Muhammad-Ayyan-no1/CDRCA-animation-dsl\nLicense: Islamic Open Source License (IOSL)\n'));
+  // Direct download handler for installer link - redirects to latest release asset
+  app.get(['/downloads/cdrca-setup-latest.exe', '/download/installer'], (req, res) => {
+    res.redirect('https://github.com/MrGrimJoe/cdrca-ready-for-the-real-world/releases/download/v0.2.0/cdrca-installer.exe');
   });
 
   // Vite middleware in dev or static serving in production
